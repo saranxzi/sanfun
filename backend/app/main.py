@@ -1,8 +1,24 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router as api_router
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+import fakeredis
+
+from app.api.routes import auth
+
+# Initialize rate limiter with fakeredis for local development
+redis_client = fakeredis.FakeRedis()
+limiter = Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379", default_limits=["200/minute"])
+# Patch limiter storage instance manually because fakeredis overrides normal redis URL behavior sometimes
+limiter._storage.storage = redis_client
 
 app = FastAPI(title="Sanfun Arcade Engine")
+
+# Set state limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -11,9 +27,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SlowAPIMiddleware)
 
-app.include_router(api_router, prefix="/api")
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 
 @app.get("/health")
-async def health_check():
+@limiter.limit("5/minute")
+async def health_check(request: Request):
     return {"status": "ok"}
