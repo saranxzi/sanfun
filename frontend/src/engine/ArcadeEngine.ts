@@ -1,4 +1,4 @@
-import { BaseGame } from '../games/BaseGame';
+import type { BaseGame } from '../games/BaseGame';
 import { InputManager } from './InputManager';
 
 export class ArcadeEngine {

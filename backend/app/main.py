@@ -8,11 +8,9 @@ import fakeredis
 
 from app.api.routes import auth
 
-# Initialize rate limiter with fakeredis for local development
-redis_client = fakeredis.FakeRedis()
-limiter = Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379", default_limits=["200/minute"])
-# Patch limiter storage instance manually because fakeredis overrides normal redis URL behavior sometimes
-limiter._storage.storage = redis_client
+# Initialize rate limiter with memory storage for local development
+limiter = Limiter(key_func=get_remote_address, storage_uri="memory://", default_limits=["200/minute"])
+
 
 app = FastAPI(title="Sanfun Arcade Engine")
 

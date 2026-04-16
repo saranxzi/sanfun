@@ -1,4 +1,4 @@
-import { BaseGame, GameManifest, InputSnapshot } from './BaseGame';
+import type { BaseGame, GameManifest, InputSnapshot } from './BaseGame';
 
 export const PONG_MANIFEST: GameManifest = {
     id: "pong",
@@ -37,7 +37,7 @@ export class PongGame implements BaseGame {
     public currentScore = 0;
     public isGameOver = false;
 
-    mount(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, assets: Record<string, any>): void {
+    mount(_canvas: HTMLCanvasElement, _ctx: CanvasRenderingContext2D, _assets: Record<string, any>): void {
         this.p1Y = this.canvasHeight / 2 - this.PADDLE_H / 2;
         this.p2Y = this.canvasHeight / 2 - this.PADDLE_H / 2;
         this.ballX = this.canvasWidth / 2;
