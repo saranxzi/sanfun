@@ -1,4 +1,4 @@
-# Sanfun
+# Sanfun Arcade
 
 Sanfun is a fast, handcrafted web arcade engine built with a strict separation of concerns, providing a highly-performant TypeScript frontend engine and a robust FastAPI backend.
 
