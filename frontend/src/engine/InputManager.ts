@@ -1,4 +1,4 @@
-import { InputSnapshot } from '../games/BaseGame';
+import type { InputSnapshot } from '../games/BaseGame';
 
 export class InputManager {
     private keys: Record<string, boolean> = {};
