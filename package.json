@@ -1,0 +1,13 @@
+{
+  "name": "sanfun",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Sanfun Arcade Master Workspace",
+  "scripts": {
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "npm run --prefix frontend dev",
+    "dev:backend": "cd backend && .\\venv\\Scripts\\python -m uvicorn app.main:app --reload",
+    "install:all": "npm install --prefix frontend && cd backend && .\\venv\\Scripts\\pip install -r requirements.txt",
+    "build": "npm run --prefix frontend build"
+  }
+}
