@@ -10,3 +10,5 @@ passlib[bcrypt]
 slowapi
 redis
 fakeredis[lua]
+pytest
+pytest-asyncio
