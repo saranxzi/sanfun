@@ -10,8 +10,10 @@ def test_health():
     assert response.json() == {"status": "ok"}
     print("Health check OK!")
 
+import uuid
+
 def test_auth():
-    username = "test_derpy_user"
+    username = f"user_{uuid.uuid4().hex[:8]}"
     password = "supersecurepassword123"
 
     # Register
