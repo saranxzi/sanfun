@@ -51,6 +51,7 @@ export class PlayerController {
 
         this.state = merged;
 
+        // Preserve form inputs across renders
         const savedInputs: Record<string, string> = {};
         this.container.querySelectorAll("input").forEach(input => {
             if (input.id) savedInputs[input.id] = input.value;
@@ -60,9 +61,7 @@ export class PlayerController {
 
         Object.entries(savedInputs).forEach(([id, val]) => {
             const input = this.container.querySelector(`#${id}`) as HTMLInputElement;
-            if (input && !input.value) {
-                input.value = val;
-            }
+            if (input && !input.value) input.value = val;
         });
     }
 
@@ -83,9 +82,7 @@ export class PlayerController {
 
     private updateTimerDisplay() {
         const timerNum = this.container.querySelector(".player-timer-number");
-        if (timerNum) {
-            timerNum.textContent = `${Math.ceil(this.currentTimer)}s`;
-        }
+        if (timerNum) timerNum.textContent = `${Math.ceil(this.currentTimer)}s`;
         const timerBar = this.container.querySelector(".player-timer-bar") as HTMLElement;
         if (timerBar && this.maxTimerDuration > 0) {
             const pct = Math.min(100, Math.max(0, (this.currentTimer / this.maxTimerDuration) * 100));
@@ -116,52 +113,58 @@ export class PlayerController {
                 <div class="controller-card">
                     <div class="brand-sub">SANFUN PARTY</div>
                     <h2>JOIN THE GAME</h2>
-
                     <div class="form-group">
                         <label>ROOM CODE</label>
                         <input type="text" id="join-code" maxlength="4" placeholder="ABCD" value="${codeFromUrl}" class="input-code" />
                     </div>
-
                     <div class="form-group">
                         <label>NICKNAME</label>
                         <input type="text" id="join-nick" maxlength="16" placeholder="Your Name" value="${savedNick}" class="input-nick" />
                     </div>
-
                     <button id="btn-player-join" class="btn-primary-mobile">ENTER PARTY</button>
                 </div>
             </div>
         `;
 
-        const btn = this.container.querySelector("#btn-player-join");
-        if (btn) {
-            btn.addEventListener("click", () => {
-                const code = (this.container.querySelector("#join-code") as HTMLInputElement).value.trim().toUpperCase();
-                const nick = (this.container.querySelector("#join-nick") as HTMLInputElement).value.trim();
-                if (code.length === 4 && nick) {
-                    localStorage.setItem("sanfun_player_nick", nick);
-                    this.socket.roomCode = code;
-                    this.socket.nickname = nick;
-                    this.socket.connect();
-                } else {
-                    alert("Please enter a 4-letter room code and your nickname.");
-                }
-            });
-        }
+        this.container.querySelector("#btn-player-join")?.addEventListener("click", () => {
+            const code = (this.container.querySelector("#join-code") as HTMLInputElement).value.trim().toUpperCase();
+            const nick = (this.container.querySelector("#join-nick") as HTMLInputElement).value.trim();
+            if (code.length === 4 && nick) {
+                localStorage.setItem("sanfun_player_nick", nick);
+                this.socket.roomCode = code;
+                this.socket.nickname = nick;
+                this.socket.connect();
+            } else {
+                alert("Please enter a 4-letter room code and your nickname.");
+            }
+        });
     }
 
     private renderLobbyWaiting() {
         this.container.innerHTML = `
             <div class="player-waiting-screen">
-                <div class="player-profile-badge" style="border-color: ${this.state!.color || '#00f0ff'};">
-                    <span class="av">${this.state!.avatar || '🎮'}</span>
-                    <span class="nick">${this.state!.nickname || 'Player'}</span>
-                </div>
-
-                <div class="waiting-box">
+                <div class="controller-card">
+                    <div class="player-profile-mini" style="justify-content: center; margin-bottom: 1rem;">
+                        <span class="av">${this.state!.avatar || "🎮"}</span>
+                        <span class="nick">${this.state!.nickname || "Player"}</span>
+                    </div>
                     <h3>YOU'RE IN! 🎉</h3>
-                    <p class="room-indicator">Room: <strong>${this.state!.room_code}</strong></p>
-                    <p>Look at the Big Screen! The host will choose and start the game soon.</p>
+                    <p style="margin: 0.8rem 0; color: #aaa;">Room: <strong style="color: var(--primary);">${this.state!.room_code}</strong></p>
+                    <p style="font-size: 0.85rem; color: #777;">Look at the Big Screen! The host will choose a game to start.</p>
                 </div>
+            </div>
+        `;
+    }
+
+    private renderCandidateList(candidates: any[] | undefined, selectedId: any, action: string): string {
+        if (!candidates || candidates.length === 0) return "";
+        return `
+            <div class="candidates-list">
+                ${candidates.map((c: any) => `
+                    <button class="btn-target ${selectedId === c.id ? "selected" : ""}" data-action="${action}" data-target="${c.id}">
+                        ${c.avatar} ${c.nickname}
+                    </button>
+                `).join("")}
             </div>
         `;
     }
@@ -170,38 +173,31 @@ export class PlayerController {
         const s = this.state!;
         let html = "";
 
-        if (s.game_id === "mafia") {
-            html = this.renderMafiaController();
-        } else if (s.game_id === "imposter") {
-            html = this.renderImposterController();
-        } else if (s.game_id === "witclash") {
-            html = this.renderWitClashController();
-        } else if (s.game_id === "trivia") {
-            html = this.renderTriviaController();
-        } else if (s.game_id === "doodledash") {
-            html = this.renderDoodleController();
-        } else {
-            html = `<div>Game controller for ${s.game_id}</div>`;
+        switch (s.game_id) {
+            case "mafia": html = this.renderMafiaController(); break;
+            case "imposter": html = this.renderImposterController(); break;
+            case "witclash": html = this.renderWitClashController(); break;
+            case "trivia": html = this.renderTriviaController(); break;
+            case "doodledash": html = this.renderDoodleController(); break;
+            default: html = `<div>Game controller for ${s.game_id}</div>`;
         }
 
         this.container.innerHTML = `
-            <div class="player-in-game">
+            <div class="player-in-game-container">
                 <div class="player-status-bar">
-                    <div class="player-profile-mini" style="border-color: ${s.color || '#00f0ff'};">
-                        <span class="av">${s.avatar || '🎮'}</span>
-                        <span class="nick">${s.nickname || 'Player'}</span>
+                    <div class="player-profile-mini">
+                        <span class="av">${s.avatar || "🎮"}</span>
+                        <span class="nick">${s.nickname || "Player"}</span>
                     </div>
                     <div class="player-timer-badge">
-                        <span class="player-timer-number">${Math.ceil(this.currentTimer || s.phase_timer || 0)}s</span>
                         <div class="player-timer-track">
                             <div class="player-timer-bar" style="width: 100%;"></div>
                         </div>
+                        <span class="player-timer-number">${Math.ceil(this.currentTimer || s.phase_timer || 0)}s</span>
                     </div>
                     <span class="score-badge">${s.score || 0} pts</span>
                 </div>
-                <div class="controller-body">
-                    ${html}
-                </div>
+                <div class="controller-body">${html}</div>
             </div>
         `;
 
@@ -210,152 +206,77 @@ export class PlayerController {
 
     private renderMafiaController(): string {
         const s = this.state!;
-        if (!s.is_alive) {
-            return `<div class="dead-screen">👻 You have been eliminated! Watch the trial on the TV.</div>`;
-        }
+        if (!s.is_alive) return `<div class="dead-screen">👻 Eliminated! Watch the trial on TV.</div>`;
 
         if (s.phase === "ROLE_REVEAL") {
+            const hints: Record<string, string> = {
+                MAFIA: "Eliminate villagers in secret without being discovered.",
+                DOCTOR: "Choose 1 person each night to protect from death.",
+                DETECTIVE: "Investigate 1 person each night to learn their role.",
+                VILLAGER: "Find and vote out the Mafia during daytime town debates."
+            };
             return `
                 <div class="role-reveal-phone">
-                    <h3>YOUR SECRET ROLE</h3>
-                    <div class="role-card-box ${s.my_role}">
-                        <div class="role-name">${s.my_role}</div>
-                        <p class="role-hint">
-                            ${s.my_role === "MAFIA" ? "Eliminate the innocent villagers without getting caught." :
-                              s.my_role === "DOCTOR" ? "Heal 1 player each night to save them from death." :
-                              s.my_role === "DETECTIVE" ? "Investigate 1 player each night to discover their alignment." :
-                              "Find the Mafia and execute them during the day votes."}
-                        </p>
+                    <h3>SECRET ROLE</h3>
+                    <div class="role-card-box" style="border-color: var(--primary);">
+                        <div class="role-name">${s.my_role || "VILLAGER"}</div>
+                        <p class="role-hint">${hints[s.my_role || "VILLAGER"] || hints.VILLAGER}</p>
                     </div>
                 </div>
             `;
         } else if (s.phase === "NIGHT_ACTIONS") {
             if (s.night_action === "MAFIA_KILL") {
-                return `
-                    <div class="action-card">
-                        <h3>🔪 SELECT KILL TARGET</h3>
-                        <div class="candidates-list">
-                            ${s.candidates ? s.candidates.map((c: any) => `
-                                <button class="btn-target ${s.my_vote === c.id ? "selected" : ""}" data-action="MAFIA_KILL" data-target="${c.id}">
-                                    ${c.avatar} ${c.nickname}
-                                </button>
-                            `).join("") : ""}
-                        </div>
-                    </div>
-                `;
+                return `<h3>🔪 NIGHT ATTACK</h3>${this.renderCandidateList(s.candidates, s.my_vote, "MAFIA_KILL")}`;
             } else if (s.night_action === "DOCTOR_HEAL") {
-                return `
-                    <div class="action-card">
-                        <h3>💉 SELECT HEAL TARGET</h3>
-                        <div class="candidates-list">
-                            ${s.candidates ? s.candidates.map((c: any) => `
-                                <button class="btn-target ${s.my_heal === c.id ? "selected" : ""}" data-action="DOCTOR_HEAL" data-target="${c.id}">
-                                    ${c.avatar} ${c.nickname}
-                                </button>
-                            `).join("") : ""}
-                        </div>
-                    </div>
-                `;
+                return `<h3>💉 HEAL SOMEONE</h3>${this.renderCandidateList(s.candidates, s.my_heal, "DOCTOR_HEAL")}`;
             } else if (s.night_action === "DETECTIVE_INVESTIGATE") {
-                return `
-                    <div class="action-card">
-                        <h3>🔍 SELECT PLAYER TO INVESTIGATE</h3>
-                        ${s.detective_result ? `
-                            <div class="det-result">
-                                <strong>${s.detective_result.target_name}</strong> is: 
-                                <span class="align">${s.detective_result.alignment}</span>
-                            </div>
-                        ` : ""}
-                        <div class="candidates-list">
-                            ${s.candidates ? s.candidates.map((c: any) => `
-                                <button class="btn-target" data-action="DETECTIVE_INVESTIGATE" data-target="${c.id}">
-                                    ${c.avatar} ${c.nickname}
-                                </button>
-                            `).join("") : ""}
-                        </div>
-                    </div>
-                `;
-            } else {
-                return `
-                    <div class="action-card">
-                        <h3>😴 NIGHT FALLS</h3>
-                        <p>You are asleep. Rest up for tomorrow's debate!</p>
-                    </div>
-                `;
+                const res = s.detective_result ? `<div class="panel-glass" style="padding: 0.6rem; margin-bottom: 0.8rem; color: var(--accent);"><strong>${s.detective_result.target_name}</strong>: ${s.detective_result.alignment}</div>` : "";
+                return `<h3>🔍 INVESTIGATE</h3>${res}${this.renderCandidateList(s.candidates, null, "DETECTIVE_INVESTIGATE")}`;
             }
+            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><h3>😴 SLEEPING</h3><p style="color: #888;">Rest up for tomorrow's debate.</p></div>`;
         } else if (s.phase === "DAY_VOTE") {
             return `
-                <div class="action-card">
-                    <h3>⚖️ CAST YOUR VOTE</h3>
-                    <div class="candidates-list">
-                        ${s.candidates ? s.candidates.map((c: any) => `
-                            <button class="btn-target ${s.my_vote === c.id ? "selected" : ""}" data-action="CAST_VOTE" data-target="${c.id}">
-                                ${c.avatar} ${c.nickname}
-                            </button>
-                        `).join("") : ""}
-                        <button class="btn-target btn-skip" data-action="CAST_VOTE" data-target="SKIP">SKIP VOTE</button>
-                    </div>
-                </div>
+                <h3>⚖️ CAST VOTE</h3>
+                ${this.renderCandidateList(s.candidates, s.my_vote, "CAST_VOTE")}
+                <button class="btn-skip" data-action="CAST_VOTE" data-target="SKIP">SKIP VOTE</button>
             `;
         }
-        return `<div>Look at the Big Screen!</div>`;
+        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
 
     private renderImposterController(): string {
         const s = this.state!;
         if (s.phase === "WORD_REVEAL" || s.phase === "CLUE_ROUNDS") {
             return `
-                <div class="imposter-card-phone">
+                <div class="imposter-card-phone" style="padding: 2rem; text-align: center;">
                     <div class="cat-pill">CATEGORY: ${s.category}</div>
                     ${s.is_imposter ? `
-                        <div class="imposter-alert">
-                            <h2>YOU ARE THE IMPOSTER! 🦎</h2>
-                            <p>You do not know the secret word. Blend in and guess what others are talking about!</p>
-                        </div>
+                        <h2 style="color: #ff0055; margin-bottom: 0.6rem;">YOU ARE THE IMPOSTER! 🦎</h2>
+                        <p style="color: #aaa; font-size: 0.85rem;">You do not know the secret word. Blend in and listen closely!</p>
                     ` : `
-                        <div class="secret-word-card">
-                            <span>SECRET WORD:</span>
-                            <h2>${s.secret_word}</h2>
-                        </div>
+                        <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.4rem;">SECRET WORD</div>
+                        <h2 style="color: var(--green); font-size: 2rem;">${s.secret_word}</h2>
                     `}
                 </div>
             `;
         } else if (s.phase === "VOTING") {
-            return `
-                <div class="action-card">
-                    <h3>WHO IS THE IMPOSTER?</h3>
-                    <div class="candidates-list">
-                        ${s.candidates ? s.candidates.map((c: any) => `
-                            <button class="btn-target ${s.my_vote === c.id ? "selected" : ""}" data-action="CAST_VOTE" data-target="${c.id}">
-                                ${c.avatar} ${c.nickname}
-                            </button>
-                        `).join("") : ""}
-                    </div>
-                </div>
-            `;
+            return `<h3>WHO IS THE IMPOSTER?</h3>${this.renderCandidateList(s.candidates, s.my_vote, "CAST_VOTE")}`;
         } else if (s.phase === "IMPOSTER_GUESS") {
             if (s.is_imposter) {
                 return `
-                    <div class="action-card">
-                        <h3>CLUTCH GUESS! WHAT IS THE WORD?</h3>
+                    <div class="panel-glass" style="padding: 1.5rem;">
+                        <h3>CLUTCH GUESS</h3>
+                        <p class="guess-note">Guess the secret word to win!</p>
                         <div class="guess-form">
-                            <input type="text" id="imp-guess-input" placeholder="Enter word..." autofocus />
-                            <button id="btn-submit-imp-guess" class="btn-primary-mobile">GUESS WORD</button>
+                            <input type="text" id="imp-guess-input" placeholder="Secret word..." autofocus />
+                            <button id="btn-submit-imp-guess">GUESS</button>
                         </div>
                     </div>
                 `;
-            } else {
-                return `<div class="action-card"><p>The Imposter is making their final guess...</p></div>`;
             }
-        } else if (s.phase === "GAME_OVER") {
-            return `
-                <div class="action-card">
-                    <h3>GAME OVER!</h3>
-                    <p>Look at the Big Screen to see final results.</p>
-                </div>
-            `;
+            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>The Imposter is guessing...</p></div>`;
         }
-        return `<div>Look at the Big Screen!</div>`;
+        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
 
     private renderWitClashController(): string {
@@ -363,35 +284,30 @@ export class PlayerController {
         if (s.phase === "PROMPT_INPUT") {
             return `
                 <div class="witclash-phone">
-                    ${s.my_prompts ? s.my_prompts.map((p: any) => `
-                        <div class="prompt-input-card">
-                            <p class="p-text">"${p.text}"</p>
-                            ${p.answered ? `<span class="badge-done">Answer Submitted!</span>` : `
-                                <input type="text" maxlength="80" placeholder="Your punchline..." id="prompt-ans-${p.id}" />
-                                <button class="btn-submit-punchline" data-prompt-id="${p.id}">SUBMIT</button>
+                    ${(s.my_prompts || []).map((p: any) => `
+                        <div class="prompt-input-card" style="padding: 1rem; margin-bottom: 1rem;">
+                            <p style="font-weight: bold; margin-bottom: 0.5rem; color: var(--accent);">"${p.text}"</p>
+                            ${p.answered ? `<span style="color: var(--green); font-size: 0.85rem;">✓ Answer Submitted</span>` : `
+                                <input type="text" maxlength="80" placeholder="Your punchline..." id="prompt-ans-${p.id}" style="width: 100%; padding: 0.6rem; margin-bottom: 0.6rem;" />
+                                <button class="btn-submit-punchline" data-prompt-id="${p.id}" style="width: 100%; padding: 0.6rem; background: var(--primary); color: #000; font-weight: bold;">SUBMIT</button>
                             `}
                         </div>
-                    `).join("") : ""}
+                    `).join("")}
                 </div>
             `;
         } else if (s.phase === "SHOWDOWN_VOTE") {
             if (s.can_vote) {
                 return `
                     <div class="vote-phone-options">
-                        <h3>VOTE FOR THE FUNNIEST!</h3>
-                        <button class="btn-vote-choice choice-1" data-action="CAST_VOTE" data-choice="1">
-                            A: "${s.answer_1}"
-                        </button>
-                        <button class="btn-vote-choice choice-2" data-action="CAST_VOTE" data-choice="2">
-                            B: "${s.answer_2}"
-                        </button>
+                        <h3 style="text-align: center;">VOTE FOR THE BEST!</h3>
+                        <button class="btn-vote-choice choice-1" data-choice="1">A: "${s.answer_1}"</button>
+                        <button class="btn-vote-choice choice-2" data-choice="2">B: "${s.answer_2}"</button>
                     </div>
                 `;
-            } else {
-                return `<div class="action-card"><p>This is your matchup! Watch the votes roll in on the TV.</p></div>`;
             }
+            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Your matchup! Watch the votes roll in on TV.</p></div>`;
         }
-        return `<div>Look at the Big Screen!</div>`;
+        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
 
     private renderTriviaController(): string {
@@ -399,52 +315,34 @@ export class PlayerController {
         if (s.phase === "QUESTION") {
             if (s.has_answered) {
                 const choiceSymbols = ["▲ Red", "◆ Blue", "● Yellow", "■ Green"];
-                const choiceText = s.selected_choice !== null && s.selected_choice !== undefined ? choiceSymbols[s.selected_choice] : "Choice registered";
+                const choiceText = s.selected_choice !== null && s.selected_choice !== undefined ? choiceSymbols[s.selected_choice] : "Registered";
                 return `
-                    <div class="action-card locked-card">
-                        <div class="status-icon">🔒</div>
-                        <h3>ANSWER LOCKED IN!</h3>
-                        <p class="locked-choice">You chose: <strong>${choiceText}</strong></p>
-                        <p class="locked-sub">Look at the TV! Results will reveal when time expires.</p>
+                    <div class="locked-card panel-glass">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔒</div>
+                        <h3>ANSWER LOCKED IN</h3>
+                        <div class="locked-choice">${choiceText}</div>
+                        <p class="locked-sub">Results will reveal on TV when the clock expires!</p>
                     </div>
                 `;
             }
             return `
                 <div class="trivia-mobile-buttons">
-                    <button class="btn-trivia-opt opt-0" data-action="SUBMIT_ANSWER" data-choice="0">
-                        <span class="shape">▲</span>
-                    </button>
-                    <button class="btn-trivia-opt opt-1" data-action="SUBMIT_ANSWER" data-choice="1">
-                        <span class="shape">◆</span>
-                    </button>
-                    <button class="btn-trivia-opt opt-2" data-action="SUBMIT_ANSWER" data-choice="2">
-                        <span class="shape">●</span>
-                    </button>
-                    <button class="btn-trivia-opt opt-3" data-action="SUBMIT_ANSWER" data-choice="3">
-                        <span class="shape">■</span>
-                    </button>
+                    <button class="btn-trivia-opt opt-0" data-choice="0">▲</button>
+                    <button class="btn-trivia-opt opt-1" data-choice="1">◆</button>
+                    <button class="btn-trivia-opt opt-2" data-choice="2">●</button>
+                    <button class="btn-trivia-opt opt-3" data-choice="3">■</button>
                 </div>
             `;
         } else if (s.phase === "REVEAL") {
             return `
-                <div class="action-card ${s.is_correct ? "correct-card" : "wrong-card"}">
-                    <div class="result-icon">${s.is_correct ? "🎉" : "❌"}</div>
-                    <h2>${s.is_correct ? "CORRECT!" : "WRONG!"}</h2>
-                    <p class="streak-text">Streak: <strong>${s.streak || 0}</strong> 🔥</p>
-                    <p class="score-now">Score: <strong>${s.score || 0} pts</strong></p>
-                </div>
-            `;
-        } else if (s.phase === "GAME_OVER") {
-            return `
-                <div class="action-card gameover-card">
-                    <div class="result-icon">⚡</div>
-                    <h2>GAME FINISHED!</h2>
-                    <p>Your Final Score: <strong>${s.score || 0} pts</strong></p>
-                    <p>Check the Big Screen for final rankings!</p>
+                <div class="panel-glass" style="padding: 2rem; text-align: center;">
+                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">${s.is_correct ? "🎉" : "❌"}</div>
+                    <h2 style="color: ${s.is_correct ? "var(--green)" : "#ff0055"};">${s.is_correct ? "CORRECT!" : "WRONG!"}</h2>
+                    <p style="margin-top: 0.5rem;">Streak: <strong>${s.streak || 0}</strong> 🔥</p>
                 </div>
             `;
         }
-        return `<div>Get ready for next question...</div>`;
+        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Get ready for next question...</p></div>`;
     }
 
     private renderDoodleController(): string {
@@ -452,7 +350,10 @@ export class PlayerController {
         if (s.is_drawer && s.phase === "DRAWING") {
             return `
                 <div class="doodle-phone-canvas">
-                    <div class="word-to-draw">Draw: <strong>${s.secret_word}</strong></div>
+                    <div class="doodle-top-bar">
+                        <span>Draw:</span>
+                        <span class="word-to-draw">${s.secret_word}</span>
+                    </div>
                     <canvas id="mobile-draw-pad" width="320" height="280"></canvas>
                     <div class="draw-tools">
                         <button id="btn-clear-draw" class="btn-tool">CLEAR CANVAS</button>
@@ -463,43 +364,39 @@ export class PlayerController {
             return `
                 <div class="doodle-phone-guesser">
                     ${s.has_guessed ? `
-                        <div class="action-card correct-card">
-                            <h3>YOU GUESSED IT! 🎉</h3>
-                            <p>Speed points awarded! Watch others guess.</p>
+                        <div class="panel-glass" style="padding: 2rem; text-align: center; border-color: var(--green);">
+                            <h3 style="color: var(--green);">YOU GUESSED IT! 🎉</h3>
+                            <p style="color: #aaa; font-size: 0.85rem; margin-top: 0.4rem;">Points awarded! Watch others guess.</p>
                         </div>
                     ` : `
-                        <div class="guess-container">
+                        <div class="panel-glass" style="padding: 1.5rem;">
                             <h3>GUESS THE DRAWING</h3>
-                            <input type="text" id="guess-input" placeholder="Type your guess..." autocomplete="off" />
-                            <button id="btn-submit-guess" class="btn-primary-mobile">SUBMIT GUESS</button>
+                            <div class="guess-form">
+                                <input type="text" id="guess-input" placeholder="Type word..." autocomplete="off" />
+                                <button id="btn-submit-guess">GUESS</button>
+                            </div>
                         </div>
                     `}
                 </div>
             `;
         } else if (s.phase === "ROUND_SUMMARY") {
-            return `
-                <div class="action-card">
-                    <h3>ROUND COMPLETE</h3>
-                    <p>The word was: <strong>${s.secret_word}</strong></p>
-                </div>
-            `;
+            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><h3>ROUND COMPLETE</h3><p>The word was: <strong>${s.secret_word}</strong></p></div>`;
         }
-        return `<div>Look at the Big Screen!</div>`;
+        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
 
     private bindControllerActions() {
-        // Target buttons (Mafia, Imposter voting)
-        this.container.querySelectorAll(".btn-target").forEach(btn => {
+        // Target buttons
+        this.container.querySelectorAll(".btn-target, .btn-skip").forEach(btn => {
             btn.addEventListener("click", (e) => {
-                const target = (e.currentTarget as HTMLElement).dataset.target;
-                const action = (e.currentTarget as HTMLElement).dataset.action;
-                if (target && action) {
-                    this.socket.send("GAME_ACTION", { action, data: { target_id: target } });
-                }
+                const el = e.currentTarget as HTMLElement;
+                const target = el.dataset.target;
+                const action = el.dataset.action;
+                if (target && action) this.socket.send("GAME_ACTION", { action, data: { target_id: target } });
             });
         });
 
-        // WitClash punchlines
+        // WitClash submit punchline
         this.container.querySelectorAll(".btn-submit-punchline").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 const pId = parseInt((e.currentTarget as HTMLElement).dataset.promptId || "0", 10);
@@ -522,35 +419,26 @@ export class PlayerController {
         this.container.querySelectorAll(".btn-trivia-opt").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 const choice = parseInt((e.currentTarget as HTMLElement).dataset.choice || "0", 10);
-                (e.currentTarget as HTMLElement).classList.add("selected");
                 this.socket.send("GAME_ACTION", { action: "SUBMIT_ANSWER", data: { choice } });
             });
         });
 
-        // Imposter clutch guess
-        const impGuessBtn = this.container.querySelector("#btn-submit-imp-guess");
-        if (impGuessBtn) {
-            impGuessBtn.addEventListener("click", () => {
-                const input = this.container.querySelector("#imp-guess-input") as HTMLInputElement;
-                if (input && input.value.trim()) {
-                    this.socket.send("GAME_ACTION", { action: "SUBMIT_GUESS", data: { guess: input.value.trim() } });
-                }
-            });
-        }
+        // Imposter guess
+        this.container.querySelector("#btn-submit-imp-guess")?.addEventListener("click", () => {
+            const input = this.container.querySelector("#imp-guess-input") as HTMLInputElement;
+            if (input?.value.trim()) this.socket.send("GAME_ACTION", { action: "SUBMIT_GUESS", data: { guess: input.value.trim() } });
+        });
 
-        // DoodleDash guessing
-        const guessBtn = this.container.querySelector("#btn-submit-guess");
-        if (guessBtn) {
-            guessBtn.addEventListener("click", () => {
-                const input = this.container.querySelector("#guess-input") as HTMLInputElement;
-                if (input && input.value.trim()) {
-                    this.socket.send("GAME_ACTION", { action: "SUBMIT_GUESS", data: { guess: input.value.trim() } });
-                    input.value = "";
-                }
-            });
-        }
+        // DoodleDash guess
+        this.container.querySelector("#btn-submit-guess")?.addEventListener("click", () => {
+            const input = this.container.querySelector("#guess-input") as HTMLInputElement;
+            if (input?.value.trim()) {
+                this.socket.send("GAME_ACTION", { action: "SUBMIT_GUESS", data: { guess: input.value.trim() } });
+                input.value = "";
+            }
+        });
 
-        // DoodleDash touch drawing pad setup
+        // Touch drawing pad
         const canvas = this.container.querySelector("#mobile-draw-pad") as HTMLCanvasElement;
         if (canvas) {
             const ctx = canvas.getContext("2d");
@@ -558,7 +446,7 @@ export class PlayerController {
                 ctx.lineCap = "round";
                 ctx.lineJoin = "round";
                 ctx.lineWidth = 4;
-                ctx.strokeStyle = "#ffffff";
+                ctx.strokeStyle = "#00f0ff";
 
                 const getPt = (e: PointerEvent) => {
                     const rect = canvas.getBoundingClientRect();
@@ -594,18 +482,14 @@ export class PlayerController {
                         this.socket.send("GAME_ACTION", { action: "DRAW_STROKE", data: { stroke: { type: "end" } } });
                     }
                 };
-
                 canvas.addEventListener("pointerup", stopDraw);
                 canvas.addEventListener("pointercancel", stopDraw);
             }
 
-            const clearBtn = this.container.querySelector("#btn-clear-draw");
-            if (clearBtn) {
-                clearBtn.addEventListener("click", () => {
-                    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    this.socket.send("GAME_ACTION", { action: "CLEAR_CANVAS" });
-                });
-            }
+            this.container.querySelector("#btn-clear-draw")?.addEventListener("click", () => {
+                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+                this.socket.send("GAME_ACTION", { action: "CLEAR_CANVAS" });
+            });
         }
     }
 }
