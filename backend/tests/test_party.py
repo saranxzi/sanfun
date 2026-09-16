@@ -1,4 +1,11 @@
 """Comprehensive automated tests for Sanfun Couch Co-Op & Party Games Platform."""
+import os
+import sys
+
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -20,6 +27,12 @@ def test_network_info():
     assert "port" in info
     assert "local_url" in info
     assert info["port"] == 8000
+
+
+def test_health():
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert res.json() == {"status": "ok"}
 
 
 def test_rest_endpoints():
