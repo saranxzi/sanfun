@@ -53,13 +53,15 @@ class PartyRoom:
         except Exception:
             pass
 
+    async def broadcast_all(self, msg_type: ServerMessageType, payload: Dict[str, Any]):
+        if self.host_socket:
+            await self.send_json_safe(self.host_socket, msg_type, payload)
+        for ws in list(self.player_sockets.values()):
+            await self.send_json_safe(ws, msg_type, payload)
+
     async def broadcast_room_state(self):
         """Broadcasts lobby overview to Host and all connected players."""
-        state = self.get_lobby_state()
-        if self.host_socket:
-            await self.send_json_safe(self.host_socket, ServerMessageType.ROOM_STATE, state)
-        for ws in self.player_sockets.values():
-            await self.send_json_safe(ws, ServerMessageType.ROOM_STATE, state)
+        await self.broadcast_all(ServerMessageType.ROOM_STATE, self.get_lobby_state())
 
     async def broadcast_game_state(self):
         """Broadcasts host projection to Big Screen and role-masked projection to each phone."""
@@ -87,18 +89,10 @@ class PartyRoom:
                 await self.send_json_safe(ws, ServerMessageType.PLAYER_STATE, player_state)
 
     async def broadcast_timer_tick(self, phase_timer: float):
-        payload = {"phase_timer": phase_timer}
-        if self.host_socket:
-            await self.send_json_safe(self.host_socket, ServerMessageType.TIMER_TICK, payload)
-        for ws in list(self.player_sockets.values()):
-            await self.send_json_safe(ws, ServerMessageType.TIMER_TICK, payload)
+        await self.broadcast_all(ServerMessageType.TIMER_TICK, {"phase_timer": phase_timer})
 
     async def broadcast_event(self, event_name: str, event_data: Dict[str, Any]):
-        msg = {"event": event_name, **event_data}
-        if self.host_socket:
-            await self.send_json_safe(self.host_socket, ServerMessageType.GAME_EVENT, msg)
-        for ws in self.player_sockets.values():
-            await self.send_json_safe(ws, ServerMessageType.GAME_EVENT, msg)
+        await self.broadcast_all(ServerMessageType.GAME_EVENT, {"event": event_name, **event_data})
 
     async def start_game(self) -> bool:
         avail = {g["id"]: g for g in get_available_games()}

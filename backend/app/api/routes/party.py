@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.party.manager import room_manager
 from app.party.network import get_network_info
 from app.party.games import get_available_games
-from app.party.protocol import ServerMessageType, InboundMessage, ClientMessageType
+from app.party.protocol import ServerMessageType, ClientMessageType
 
 router = APIRouter()
 

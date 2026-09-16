@@ -153,11 +153,7 @@ class WitClashGame(BasePartyGame):
         return {"status": "ignored"}
 
     def get_host_state(self) -> Dict[str, Any]:
-        public_players = [
-            {"id": pid, "nickname": p.nickname, "avatar": p.avatar, "color": p.color, "score": self.scores.get(pid, 0)}
-            for pid, p in self.players.items()
-        ]
-
+        state = self.get_base_state()
         current_matchup = None
         if self.phase in ("SHOWDOWN_VOTE", "SHOWDOWN_REVEAL"):
             m = self.prompts[self.matchup_index]
@@ -175,15 +171,12 @@ class WitClashGame(BasePartyGame):
                 "is_sweep": (v1 > 0 and v2 == 0) or (v2 > 0 and v1 == 0) if self.phase == "SHOWDOWN_REVEAL" else False
             }
 
-        return {
-            "game_id": self.id,
-            "phase": self.phase,
-            "phase_timer": round(self.phase_timer, 1),
-            "players": public_players,
+        state.update({
             "matchup_index": self.matchup_index,
             "total_matchups": len(self.prompts),
             "current_matchup": current_matchup,
-        }
+        })
+        return state
 
     def get_player_state(self, player_id: str) -> Dict[str, Any]:
         state = {

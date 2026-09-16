@@ -118,30 +118,20 @@ class DoodleDashGame(BasePartyGame):
 
     def get_host_state(self) -> Dict[str, Any]:
         drawer_id = self.drawer_order[self.current_drawer_idx]
-        public_players = [
-            {
-                "id": pid,
-                "nickname": p.nickname,
-                "avatar": p.avatar,
-                "color": p.color,
-                "score": self.scores.get(pid, 0),
-                "is_drawer": pid == drawer_id,
-                "has_guessed": pid in self.correct_guessers
-            }
-            for pid, p in self.players.items()
-        ]
+        state = self.get_base_state()
+        for p in state["players"]:
+            pid = p["id"]
+            p["is_drawer"] = pid == drawer_id
+            p["has_guessed"] = pid in self.correct_guessers
 
-        return {
-            "game_id": self.id,
-            "phase": self.phase,
-            "phase_timer": round(self.phase_timer, 1),
+        state.update({
             "drawer_name": self.players[drawer_id].nickname,
             "strokes": self.strokes,
             "secret_word": self.secret_word if self.phase in ("ROUND_SUMMARY", "GAME_OVER") else ("_ " * len(self.secret_word)),
             "word_length": len(self.secret_word),
             "guesses": self.guesses[-6:],
-            "players": public_players,
-        }
+        })
+        return state
 
     def get_player_state(self, player_id: str) -> Dict[str, Any]:
         drawer_id = self.drawer_order[self.current_drawer_idx]

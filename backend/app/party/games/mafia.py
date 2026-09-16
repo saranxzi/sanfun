@@ -238,24 +238,13 @@ class MafiaGame(BasePartyGame):
 
     def get_host_state(self) -> Dict[str, Any]:
         """Big Screen display projection. Never reveals secrets during active game!"""
-        public_players = []
-        for pid, p in self.players.items():
-            public_players.append({
-                "id": pid,
-                "nickname": p.nickname,
-                "avatar": p.avatar,
-                "color": p.color,
-                "is_alive": pid in self.alive_players,
-                "score": self.scores.get(pid, 0),
-                "role_revealed": self.roles.get(pid) if (self.phase == "GAME_OVER" or pid not in self.alive_players) else None
-            })
+        state = self.get_base_state()
+        for p in state["players"]:
+            pid = p["id"]
+            p["is_alive"] = pid in self.alive_players
+            p["role_revealed"] = self.roles.get(pid) if (self.phase == "GAME_OVER" or pid not in self.alive_players) else None
 
-        return {
-            "game_id": self.id,
-            "phase": self.phase,
-            "phase_timer": round(self.phase_timer, 1),
-            "round_number": self.round_number,
-            "players": public_players,
+        state.update({
             "winner": self.winner,
             "last_killed_name": self.players[self.last_killed_id].nickname if self.last_killed_id else None,
             "last_killed_role": self.last_killed_role,
@@ -263,7 +252,8 @@ class MafiaGame(BasePartyGame):
             "history_log": self.history_log[-5:],
             "alive_count": len(self.alive_players),
             "votes_cast_count": len(self.day_votes) if self.phase == "DAY_VOTE" else None,
-        }
+        })
+        return state
 
     def get_player_state(self, player_id: str) -> Dict[str, Any]:
         """Strictly role-masked controller projection."""

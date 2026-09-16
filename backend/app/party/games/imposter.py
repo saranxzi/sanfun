@@ -125,25 +125,13 @@ class ImposterGame(BasePartyGame):
 
     def get_host_state(self) -> Dict[str, Any]:
         """Big Screen TV view. Does NOT leak secret word or imposter identity until GAME_OVER!"""
-        public_players = [
-            {
-                "id": pid,
-                "nickname": p.nickname,
-                "avatar": p.avatar,
-                "color": p.color,
-                "score": self.scores.get(pid, 0),
-                "is_imposter": pid in self.imposter_ids if self.phase == "GAME_OVER" else None
-            }
-            for pid, p in self.players.items()
-        ]
+        state = self.get_base_state()
+        for p in state["players"]:
+            p["is_imposter"] = (p["id"] in self.imposter_ids) if self.phase == "GAME_OVER" else None
 
-        return {
-            "game_id": self.id,
-            "phase": self.phase,
-            "phase_timer": round(self.phase_timer, 1),
+        state.update({
             "category": self.category,
             "secret_word": self.secret_word if self.phase == "GAME_OVER" else None,
-            "players": public_players,
             "clue_order": [self.players[pid].nickname for pid in self.clue_order if pid in self.players],
             "voted_out_name": self.players[self.voted_out_id].nickname if self.voted_out_id else None,
             "voted_out_was_imposter": (self.voted_out_id in self.imposter_ids) if self.voted_out_id else None,
@@ -151,7 +139,8 @@ class ImposterGame(BasePartyGame):
             "imposter_guess_correct": self.imposter_guess_correct,
             "winner": self.winner,
             "candidate_words": WORD_PACKS.get(self.category, []),
-        }
+        })
+        return state
 
     def get_player_state(self, player_id: str) -> Dict[str, Any]:
         """Private mobile controller view. Imposter never gets the secret word!"""

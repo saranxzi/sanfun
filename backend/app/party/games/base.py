@@ -50,6 +50,32 @@ class BasePartyGame(ABC):
     def on_timer_expired(self) -> Optional[str]:
         return None
 
+    def get_public_players(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": p.id,
+                "nickname": p.nickname,
+                "avatar": p.avatar,
+                "color": p.color,
+                "score": self.scores.get(p.id, 0),
+                "is_connected": p.is_connected,
+            }
+            for p in self.players.values()
+        ]
+
+    def get_base_state(self) -> Dict[str, Any]:
+        return {
+            "game_id": self.id,
+            "room_code": self.room_code,
+            "phase": self.phase,
+            "phase_timer": self.phase_timer,
+            "round_number": self.round_number,
+            "max_rounds": self.max_rounds,
+            "is_over": self.is_over,
+            "scores": self.scores,
+            "players": self.get_public_players(),
+        }
+
     @abstractmethod
     def get_host_state(self) -> Dict[str, Any]:
         """

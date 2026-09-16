@@ -133,20 +133,13 @@ class TriviaGame(BasePartyGame):
         return {"status": "ignored"}
 
     def get_host_state(self) -> Dict[str, Any]:
-        q = self.questions[self.current_idx] if self.current_idx < len(self.questions) else None
-        public_players = [
-            {
-                "id": pid,
-                "nickname": p.nickname,
-                "avatar": p.avatar,
-                "color": p.color,
-                "score": self.scores.get(pid, 0),
-                "streak": self.streaks.get(pid, 0),
-                "answered": pid in self.answers
-            }
-            for pid, p in self.players.items()
-        ]
+        state = self.get_base_state()
+        for p in state["players"]:
+            pid = p["id"]
+            p["streak"] = self.streaks.get(pid, 0)
+            p["answered"] = pid in self.answers
 
+        q = self.questions[self.current_idx] if self.current_idx < len(self.questions) else None
         stats = [0, 0, 0, 0]
         if self.phase == "REVEAL":
             for ans in self.answers.values():
@@ -154,18 +147,15 @@ class TriviaGame(BasePartyGame):
                 if c is not None and 0 <= c < 4:
                     stats[c] += 1
 
-        return {
-            "game_id": self.id,
-            "phase": self.phase,
-            "phase_timer": round(self.phase_timer, 1),
+        state.update({
             "question_index": self.current_idx + 1,
             "total_questions": len(self.questions),
             "question": q["q"] if q else "",
             "options": q["options"] if q else [],
             "correct_option": q["correct"] if self.phase == "REVEAL" else None,
             "option_stats": stats if self.phase == "REVEAL" else None,
-            "players": public_players,
-        }
+        })
+        return state
 
     def get_player_state(self, player_id: str) -> Dict[str, Any]:
         ans = self.answers.get(player_id)
