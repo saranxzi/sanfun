@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  sanfun-party:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sanfun_party_server
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST_LAN_IP=${HOST_LAN_IP:-}
+      - PUBLIC_TUNNEL_URL=${PUBLIC_TUNNEL_URL:-}
+    restart: unless-stopped
+
+  # Optional Cloudflare Tunnel for remote friends over the internet without port forwarding
+  # Run with: docker compose --profile tunnel up
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: sanfun_party_tunnel
+    restart: unless-stopped
+    command: tunnel --url http://sanfun-party:8000
+    profiles:
+      - tunnel
+    depends_on:
+      - sanfun-party

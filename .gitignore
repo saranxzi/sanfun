@@ -17,3 +17,9 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Party Runtime
+cloudflared.exe
+.tunnel_url
+*.log
+*.out
