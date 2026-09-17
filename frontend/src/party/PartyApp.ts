@@ -46,6 +46,7 @@ export class PartyApp {
                 if (state.state === "LOBBY") {
                     this.hostLobbyView!.updateState(state as LobbyState);
                 } else if (state.state === "IN_GAME") {
+                    this.hostLobbyView?.destroy();
                     this.hostGameView!.updateState(state as HostGameState);
                 }
             };
@@ -64,6 +65,12 @@ export class PartyApp {
     public initPlayerMode(roomCode: string) {
         this.socket = new PartySocket(roomCode, "player");
         this.playerController = new PlayerController(this.container, this.socket);
+
+        this.socket.onRoomState = (state: LobbyState | HostGameState) => {
+            if (state.state === "LOBBY") {
+                this.playerController!.handleLobbyState(state as LobbyState);
+            }
+        };
 
         this.socket.onPlayerState = (state: PlayerGameState) => {
             this.playerController!.updateState(state);

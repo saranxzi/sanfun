@@ -10,6 +10,8 @@ export class HostLobbyView {
     private qrSvg: string = "";
     private urlMode: "tunnel" | "local" = "local";
     private lastGeneratedUrl: string = "";
+    private userSelectedMode: boolean = false;
+    private pollInterval: number | null = null;
 
     constructor(container: HTMLElement, socket: PartySocket) {
         this.container = container;
@@ -26,13 +28,63 @@ export class HostLobbyView {
             soundManager.playLeave();
         }
 
-        // If tunnel URL just became available, auto-switch to it
-        if (state.network_info.tunnel_url && this.urlMode === "local" && prevCount === 0) {
-            this.urlMode = "tunnel";
+        // If tunnel URL is available and user hasn't explicitly locked local mode, switch to tunnel
+        if (state.network_info.tunnel_url) {
+            if (!this.userSelectedMode) {
+                this.urlMode = "tunnel";
+            }
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+        } else {
+            this.startTunnelPolling();
         }
 
         await this.refreshQr();
         this.render();
+    }
+
+    private startTunnelPolling() {
+        if (this.pollInterval) return;
+        this.pollInterval = window.setInterval(async () => {
+            if (this.state?.network_info.tunnel_url) {
+                if (this.pollInterval) {
+                    clearInterval(this.pollInterval);
+                    this.pollInterval = null;
+                }
+                return;
+            }
+
+            try {
+                const loc = window.location;
+                const apiBase = loc.port === "5173" ? `http://${loc.hostname}:8000` : "";
+                const res = await fetch(`${apiBase}/api/party/host-info`);
+                if (!res.ok) return;
+                const info = await res.json();
+                if (info.tunnel_url && this.state) {
+                    this.state.network_info = info;
+                    if (!this.userSelectedMode) {
+                        this.urlMode = "tunnel";
+                    }
+                    if (this.pollInterval) {
+                        clearInterval(this.pollInterval);
+                        this.pollInterval = null;
+                    }
+                    await this.refreshQr();
+                    this.render();
+                }
+            } catch {
+                // Non-blocking fallback poll
+            }
+        }, 2000);
+    }
+
+    public destroy() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
     }
 
     private async refreshQr() {
@@ -57,6 +109,11 @@ export class HostLobbyView {
             ? this.state.network_info.tunnel_url
             : this.state.network_info.local_url;
         const activeJoinUrl = `${activeBaseUrl}/?join=${this.state.room_code}`;
+        const tunnelAvailable = !!this.state.network_info.tunnel_url;
+        const tunnelLabel = tunnelAvailable ? "🌐 Internet Tunnel ★" : "🌐 Internet Tunnel (Connecting...)";
+        const tunnelTitle = tunnelAvailable
+            ? "Works across phone hotspots, mobile data, & remote players"
+            : "Connecting to Cloudflare Edge...";
 
         this.container.innerHTML = `
             <div class="party-host-lobby">
@@ -80,8 +137,8 @@ export class HostLobbyView {
 
                         <!-- Network Mode Switcher -->
                         <div class="network-mode-tabs">
-                            <button class="tab-net ${this.urlMode === "tunnel" ? "active" : ""}" id="tab-mode-tunnel" ${!this.state.network_info.tunnel_url ? "disabled title='Tunnel offline'" : ""}>
-                                🌐 Internet Tunnel ${this.state.network_info.tunnel_url ? "★" : "(Off)"}
+                            <button class="tab-net ${this.urlMode === "tunnel" ? "active" : ""}" id="tab-mode-tunnel" ${!tunnelAvailable ? "disabled" : ""} title="${tunnelTitle}">
+                                ${tunnelLabel}
                             </button>
                             <button class="tab-net ${this.urlMode === "local" ? "active" : ""}" id="tab-mode-local">
                                 📶 Local Wi-Fi
@@ -170,6 +227,7 @@ export class HostLobbyView {
         if (tabTunnel) {
             tabTunnel.addEventListener("click", async () => {
                 if (this.state?.network_info.tunnel_url) {
+                    this.userSelectedMode = true;
                     this.urlMode = "tunnel";
                     await this.refreshQr();
                     this.render();
@@ -180,6 +238,7 @@ export class HostLobbyView {
         const tabLocal = this.container.querySelector("#tab-mode-local");
         if (tabLocal) {
             tabLocal.addEventListener("click", async () => {
+                this.userSelectedMode = true;
                 this.urlMode = "local";
                 await this.refreshQr();
                 this.render();

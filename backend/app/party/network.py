@@ -1,6 +1,11 @@
-"""Network utilities for local LAN IP discovery and connection addressing."""
+"""Network utilities for local LAN IP discovery, Cloudflare Tunnel management, and connection addressing."""
 import os
+import sys
+import re
 import socket
+import subprocess
+import threading
+import asyncio
 from typing import List, Dict, Any, Optional
 
 
@@ -69,6 +74,167 @@ def get_active_tunnel_url() -> Optional[str]:
             except Exception:
                 pass
     return None
+
+
+class CloudflareTunnelManager:
+    """
+    Manages the lifecycle of the Cloudflare Edge Tunnel (cloudflared).
+    Guarantees single instance execution, cleans up stale processes,
+    discovers the trycloudflare.com URL, and notifies active party rooms.
+    """
+    def __init__(self, port: int = 8000):
+        self.port = port
+        self.proc: Optional[subprocess.Popen] = None
+        self.tunnel_url: Optional[str] = None
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def _find_cloudflared_exe(self) -> Optional[str]:
+        candidates = [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../cloudflared.exe")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../cloudflared.exe")),
+            os.path.abspath("cloudflared.exe"),
+            os.path.abspath("../cloudflared.exe"),
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+        import shutil
+        return shutil.which("cloudflared")
+
+    def _kill_existing_instances(self):
+        """Kills any orphaned cloudflared processes to avoid tunnel collision and rate limiting."""
+        if os.name == "nt":
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", "cloudflared.exe"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                import time
+                time.sleep(0.15)
+            except Exception:
+                pass
+        else:
+            try:
+                subprocess.run(
+                    ["pkill", "-f", "cloudflared"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                pass
+
+    def start(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+        # Do not start subprocesses during automated test suite runs
+        if "pytest" in sys.modules or os.environ.get("TESTING") == "1":
+            return
+
+        if self.proc is not None:
+            return
+
+        self._loop = loop
+        exe_path = self._find_cloudflared_exe()
+        if not exe_path:
+            print("[TUNNEL] cloudflared binary not found; running in local Wi-Fi mode.")
+            return
+
+        self._kill_existing_instances()
+        self._stop_event.clear()
+
+        print(f"[TUNNEL] Starting Cloudflare Edge Tunnel proxy for port {self.port}...")
+        try:
+            self.proc = subprocess.Popen(
+                [exe_path, "tunnel", "--url", f"http://127.0.0.1:{self.port}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            )
+        except Exception as e:
+            print(f"[TUNNEL] Failed to launch cloudflared: {e}")
+            self.proc = None
+            return
+
+        def _monitor():
+            global _registered_tunnel_url
+            for line in iter(self.proc.stdout.readline, ''):
+                if self._stop_event.is_set():
+                    break
+                match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line)
+                if match and not self.tunnel_url:
+                    self.tunnel_url = match.group(0)
+                    _registered_tunnel_url = self.tunnel_url
+                    os.environ["PUBLIC_TUNNEL_URL"] = self.tunnel_url
+
+                    # Write to root .tunnel_url file
+                    root_tunnel_file = os.path.abspath(
+                        os.path.join(os.path.dirname(__file__), "../../../.tunnel_url")
+                    )
+                    try:
+                        with open(root_tunnel_file, "w", encoding="utf-8") as f:
+                            f.write(self.tunnel_url)
+                    except Exception:
+                        pass
+
+                    print(f"\n========================================================")
+                    print(f"  [TUNNEL READY] {self.tunnel_url}")
+                    print(f"  Phones on mobile data/hotspot can join via this link!")
+                    print(f"========================================================\n")
+
+                    # Notify active lobby rooms via WebSocket
+                    if self._loop and self._loop.is_running():
+                        try:
+                            from app.party.manager import room_manager
+                            for r in list(room_manager.rooms.values()):
+                                if r.state == "LOBBY":
+                                    asyncio.run_coroutine_threadsafe(
+                                        r.broadcast_room_state(), self._loop
+                                    )
+                        except Exception:
+                            pass
+
+            if not self._stop_event.is_set() and not self.tunnel_url:
+                print("[TUNNEL] cloudflared process ended before tunnel URL was acquired.")
+
+            if self.proc:
+                self.proc.poll()
+
+        self._thread = threading.Thread(target=_monitor, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        if self.proc:
+            try:
+                self.proc.terminate()
+                self.proc.kill()
+            except Exception:
+                pass
+            self.proc = None
+        self.tunnel_url = None
+        global _registered_tunnel_url
+        _registered_tunnel_url = None
+        self._kill_existing_instances()
+
+        # Clean up candidate .tunnel_url files
+        candidate_paths = [
+            os.path.abspath(".tunnel_url"),
+            os.path.abspath("../.tunnel_url"),
+            os.path.abspath("../../.tunnel_url"),
+            os.path.join(os.path.dirname(__file__), "../../../.tunnel_url"),
+        ]
+        for p in candidate_paths:
+            if os.path.isfile(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+
+
+tunnel_manager = CloudflareTunnelManager(port=8000)
 
 
 def get_network_info(port: int = 8000) -> Dict[str, Any]:

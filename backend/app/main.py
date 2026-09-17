@@ -19,8 +19,13 @@ limiter = Limiter(key_func=get_remote_address, storage_uri="memory://", default_
 async def lifespan(app: FastAPI):
     # Start background tick loop for party game phase timers
     tick_task = asyncio.create_task(room_manager.run_tick_loop())
+    # Start Cloudflare edge tunnel in background (guarantees single instance & auto-reconnect)
+    from app.party.network import tunnel_manager
+    loop = asyncio.get_running_loop()
+    tunnel_manager.start(loop=loop)
     yield
     tick_task.cancel()
+    tunnel_manager.stop()
 
 
 app = FastAPI(title="Sanfun Arcade Engine", lifespan=lifespan)
