@@ -17,6 +17,8 @@ from app.party.games.imposter import ImposterGame
 from app.party.games.witclash import WitClashGame
 from app.party.games.trivia import TriviaGame
 from app.party.games.doodledash import DoodleDashGame
+from app.party.games.mostlikely import MostLikelyGame
+from app.party.games.wordbomb import WordBombGame
 
 client = TestClient(app)
 
@@ -44,13 +46,15 @@ def test_rest_endpoints():
     res = client.get("/api/party/games")
     assert res.status_code == 200
     games = res.json()
-    assert len(games) >= 5
+    assert len(games) >= 7
     game_ids = [g["id"] for g in games]
     assert "mafia" in game_ids
     assert "imposter" in game_ids
     assert "witclash" in game_ids
     assert "trivia" in game_ids
     assert "doodledash" in game_ids
+    assert "mostlikely" in game_ids
+    assert "wordbomb" in game_ids
 
     create_res = client.post("/api/party/create")
     assert create_res.status_code == 200
@@ -293,4 +297,66 @@ def test_register_tunnel_endpoint():
     # Verify get_network_info now includes this tunnel
     info = get_network_info()
     assert info["tunnel_url"] == "https://cool-tunnel.trycloudflare.com"
+
+
+def test_mostlikely_voting():
+    players = {
+        "p0": PlayerInfo(id="p0", nickname="Alice"),
+        "p1": PlayerInfo(id="p1", nickname="Bob"),
+        "p2": PlayerInfo(id="p2", nickname="Charlie"),
+    }
+    game = MostLikelyGame("TEST", players)
+    game.start()
+
+    assert game.phase == "QUESTION_VOTE"
+    assert game.current_question != ""
+
+    # Alice and Bob both vote for Charlie (p2)
+    game.handle_action("p0", "CAST_VOTE", {"target_id": "p2"})
+    assert game.phase == "QUESTION_VOTE"
+    assert game.votes["p0"] == "p2"
+
+    game.handle_action("p1", "CAST_VOTE", {"target_id": "p2"})
+    # Charlie votes for Alice (p0)
+    res = game.handle_action("p2", "CAST_VOTE", {"target_id": "p0"})
+
+    assert game.phase == "VOTE_REVEAL"
+    assert res.get("broadcast") is True
+    assert game.top_voted_id == "p2"
+    assert game.scores["p0"] == 150
+    assert game.scores["p1"] == 150
+    assert game.scores["p2"] == 0
+
+
+def test_wordbomb_word_validation():
+    players = {
+        "p0": PlayerInfo(id="p0", nickname="Alice"),
+        "p1": PlayerInfo(id="p1", nickname="Bob"),
+    }
+    game = WordBombGame("TEST", players)
+    game.start()
+
+    assert game.phase == "ROUND_ACTIVE"
+    active_pid = game.current_holder_id
+    assert active_pid in ["p0", "p1"]
+    other_pid = "p1" if active_pid == "p0" else "p0"
+
+    # Try action from inactive player -> not_your_turn
+    inactive_res = game.handle_action(other_pid, "SUBMIT_WORD", {"word": "HELLO"})
+    assert inactive_res.get("status") == "not_your_turn"
+
+    # Try invalid word that does not contain prompt
+    game.current_prompt = "XYZ"
+    res_bad = game.handle_action(active_pid, "SUBMIT_WORD", {"word": "CAT"})
+    assert res_bad.get("status") == "missing_prompt"
+    assert game.current_holder_id == active_pid
+
+    # Give prompt "IN" and test valid word "TRAIN"
+    game.current_prompt = "IN"
+    res_good = game.handle_action(active_pid, "SUBMIT_WORD", {"word": "train"})
+    assert res_good.get("broadcast") is True
+    assert game.current_holder_id == other_pid
+    assert "TRAIN" in game.used_words
+    assert game.scores[active_pid] > 0
+
 

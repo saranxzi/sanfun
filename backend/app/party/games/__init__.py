@@ -6,6 +6,8 @@ from app.party.games.imposter import ImposterGame
 from app.party.games.witclash import WitClashGame
 from app.party.games.trivia import TriviaGame
 from app.party.games.doodledash import DoodleDashGame
+from app.party.games.mostlikely import MostLikelyGame
+from app.party.games.wordbomb import WordBombGame
 from app.party.protocol import PlayerInfo
 
 GAME_CLASSES: Dict[str, Type[BasePartyGame]] = {
@@ -14,6 +16,8 @@ GAME_CLASSES: Dict[str, Type[BasePartyGame]] = {
     WitClashGame.id: WitClashGame,
     TriviaGame.id: TriviaGame,
     DoodleDashGame.id: DoodleDashGame,
+    MostLikelyGame.id: MostLikelyGame,
+    WordBombGame.id: WordBombGame,
 }
 
 
