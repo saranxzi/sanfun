@@ -179,6 +179,8 @@ export class PlayerController {
             case "witclash": html = this.renderWitClashController(); break;
             case "trivia": html = this.renderTriviaController(); break;
             case "doodledash": html = this.renderDoodleController(); break;
+            case "mostlikely": html = this.renderMostLikelyController(); break;
+            case "wordbomb": html = this.renderWordBombController(); break;
             default: html = `<div>Game controller for ${s.game_id}</div>`;
         }
 
@@ -385,7 +387,139 @@ export class PlayerController {
         return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
 
+    private renderMostLikelyController(): string {
+        const s = this.state!;
+        const promptText = s.question || s.prompt || "Who is most likely to...";
+        if (s.phase === "QUESTION_VOTE" || s.phase === "VOTING") {
+            if (s.has_voted) {
+                const votedCandidate = s.candidates?.find((c: any) => c.id === s.my_vote);
+                const votedName = votedCandidate ? votedCandidate.nickname : "Your pick";
+                return `
+                    <div class="panel-glass" style="padding: 2rem; text-align: center;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🗳️</div>
+                        <h3>VOTE RECORDED!</h3>
+                        <p style="color: var(--primary); font-weight: bold; margin: 0.5rem 0;">Picked: ${votedName}</p>
+                        <p style="color: #888; font-size: 0.85rem;">Look at the big screen when votes are revealed!</p>
+                    </div>
+                `;
+            }
+            return `
+                <div class="mostlikely-phone">
+                    <div class="prompt-box" style="margin-bottom: 1.2rem; text-align: center;">
+                        <span style="font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em;">WHO IS MOST LIKELY TO:</span>
+                        <h2 style="font-size: 1.15rem; color: var(--accent); margin-top: 0.3rem;">"${promptText}"</h2>
+                    </div>
+                    <div class="candidates-vote-grid" style="display: flex; flex-direction: column; gap: 0.6rem;">
+                        ${(s.candidates || []).map((c: any) => `
+                            <button class="btn-mostlikely-candidate ${s.my_vote === c.id ? "selected" : ""}" data-candidate-id="${c.id}" style="display: flex; align-items: center; gap: 0.8rem; padding: 0.85rem 1.2rem; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; color: #fff; font-size: 1rem; cursor: pointer; text-align: left; width: 100%;">
+                                <span style="font-size: 1.4rem;">${c.avatar}</span>
+                                <span style="font-weight: 600;">${c.nickname}</span>
+                            </button>
+                        `).join("")}
+                    </div>
+                </div>
+            `;
+        } else if (s.phase === "VOTE_REVEAL" || s.phase === "REVEAL") {
+            return `
+                <div class="panel-glass" style="padding: 2rem; text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
+                    <h3>RESULTS ON SCREEN!</h3>
+                    <p style="color: #aaa; margin-top: 0.5rem;">Check the TV to see who got roasted and who scored!</p>
+                </div>
+            `;
+        }
+        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
+    }
+
+    private renderWordBombController(): string {
+        const s = this.state!;
+        const strikes = s.strikes !== undefined ? s.strikes : 0;
+        const lives = s.my_lives !== undefined ? s.my_lives : Math.max(0, 3 - strikes);
+        const isAlive = lives > 0;
+        const currentPrompt = s.current_prompt || s.prompt || "...";
+        const isMyTurn = Boolean(s.is_holding_bomb || s.is_active);
+
+        if (!isAlive) {
+            return `
+                <div class="panel-glass" style="padding: 2rem; text-align: center; border-color: #ff0055;">
+                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">💀</div>
+                    <h2 style="color: #ff0055;">YOU ARE OUT!</h2>
+                    <p style="color: #aaa; font-size: 0.85rem; margin-top: 0.5rem;">You ran out of lives. Cheer for the survivors on TV!</p>
+                </div>
+            `;
+        }
+
+        if (s.phase === "ROUND_ACTIVE" || s.phase === "ROUND") {
+            if (isMyTurn) {
+                return `
+                    <div class="wordbomb-active-turn" style="text-align: center;">
+                        <div style="font-size: 2.5rem; animation: pulse 0.8s infinite alternate;">💣</div>
+                        <h2 style="color: #ff0055; margin: 0.3rem 0;">YOUR TURN! DEFUSE IT!</h2>
+                        <div class="letters-prompt-card" style="background: rgba(255, 0, 85, 0.12); border: 1px solid #ff0055; border-radius: 12px; padding: 1rem; margin: 1rem 0;">
+                            <div style="font-size: 0.8rem; color: #aaa; letter-spacing: 0.05em;">MUST CONTAIN:</div>
+                            <div style="font-size: 2.2rem; font-weight: 900; color: #fff; letter-spacing: 0.15em;">${currentPrompt}</div>
+                        </div>
+                        <div class="word-submit-box" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                            <input type="text" id="wordbomb-input" class="input-nick" placeholder="Type a word..." autocomplete="off" autofocus style="text-transform: uppercase; font-size: 1.2rem; text-align: center; font-weight: bold; width: 100%;" />
+                            <button id="btn-submit-wordbomb" class="btn-primary-mobile" style="background: linear-gradient(135deg, #ff0055, #ff5500); border-color: #ff5500;">PASS BOMB ➔</button>
+                        </div>
+                        <div class="lives-indicator" style="margin-top: 1rem; font-size: 0.9rem; color: #aaa;">
+                            Lives: <span style="letter-spacing: 2px;">${"❤️".repeat(lives)}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            return `
+                <div class="wordbomb-waiting-turn panel-glass" style="padding: 2rem; text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⏳</div>
+                    <h3>BOMB IS TICKING!</h3>
+                    <p style="color: var(--accent); margin: 0.5rem 0;"><strong>${s.holder_name || s.active_player_name || "Someone"}</strong> has the bomb!</p>
+                    <div style="background: rgba(255,255,255,0.06); padding: 0.5rem 1rem; border-radius: 20px; display: inline-block; margin-top: 0.5rem;">
+                        Contains: <strong style="color: var(--primary); letter-spacing: 1px;">${currentPrompt}</strong>
+                    </div>
+                    <div class="lives-indicator" style="margin-top: 1.5rem; font-size: 0.9rem; color: #aaa;">
+                        Your Lives: <span style="letter-spacing: 2px;">${"❤️".repeat(lives)}</span>
+                    </div>
+                    <p style="color: #777; font-size: 0.8rem; margin-top: 1rem;">Get ready to type when the bomb is passed to you!</p>
+                </div>
+            `;
+        } else if (s.phase === "EXPLOSION") {
+            return `
+                <div class="panel-glass" style="padding: 2rem; text-align: center;">
+                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">💥</div>
+                    <h2>BOOM!</h2>
+                    <p style="color: #aaa;">${s.last_exploded_player || s.exploded_player_name || "A player"} ran out of time!</p>
+                </div>
+            `;
+        }
+        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
+    }
+
     private bindControllerActions() {
+        // Most Likely To voting
+        this.container.querySelectorAll(".btn-mostlikely-candidate").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const targetId = (e.currentTarget as HTMLElement).dataset.candidateId;
+                if (targetId) this.socket.send("GAME_ACTION", { action: "CAST_VOTE", data: { target_id: targetId } });
+            });
+        });
+
+        // Word Bomb submit word
+        const submitWordBomb = () => {
+            const input = this.container.querySelector("#wordbomb-input") as HTMLInputElement;
+            if (input && input.value.trim()) {
+                this.socket.send("GAME_ACTION", { action: "SUBMIT_WORD", data: { word: input.value.trim() } });
+                input.value = "";
+            }
+        };
+        this.container.querySelector("#btn-submit-wordbomb")?.addEventListener("click", submitWordBomb);
+        this.container.querySelector("#wordbomb-input")?.addEventListener("keydown", (e: Event) => {
+            if ((e as KeyboardEvent).key === "Enter") {
+                e.preventDefault();
+                submitWordBomb();
+            }
+        });
+
         // Target buttons
         this.container.querySelectorAll(".btn-target, .btn-skip").forEach(btn => {
             btn.addEventListener("click", (e) => {

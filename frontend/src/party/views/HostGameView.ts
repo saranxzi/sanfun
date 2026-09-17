@@ -60,6 +60,7 @@ export class HostGameView {
         if (newPhase === "DAY_DAWN" || newPhase === "DAY_EXECUTION") soundManager.playGong();
         else if (newPhase === "SHOWDOWN_REVEAL" || newPhase === "REVEAL") soundManager.playDing();
         else if (newPhase === "GAME_OVER") soundManager.playVictory();
+        else if (newPhase === "EXPLOSION") soundManager.playBuzzer();
         else soundManager.playTone(400, 0.1, "sine");
     }
 
@@ -73,6 +74,8 @@ export class HostGameView {
             case "witclash": content = this.renderWitClash(); break;
             case "trivia": content = this.renderTrivia(); break;
             case "doodledash": content = this.renderDoodleDash(); break;
+            case "mostlikely": content = this.renderMostLikely(); break;
+            case "wordbomb": content = this.renderWordBomb(); break;
             default: content = `<div>Unknown Game: ${this.state.game_id}</div>`;
         }
 
@@ -380,5 +383,141 @@ export class HostGameView {
                 </div>
             </div>
         `;
+    }
+
+    private renderMostLikely(): string {
+        const s = this.state!;
+        const promptText = s.question || s.prompt || "Who is most likely to...";
+        if (s.phase === "QUESTION_VOTE" || s.phase === "VOTING") {
+            const votesCast = s.votes_cast_count !== undefined ? s.votes_cast_count : (s.votes_cast || 0);
+            const totalVoters = s.players?.length || s.total_voters || 1;
+            return `
+                <div class="phase-card mostlikely-host-card">
+                    <div class="round-badge">ROUND ${s.round_number || 1} / ${s.max_rounds || 5}</div>
+                    <h2 class="mostlikely-prompt">"${promptText}"</h2>
+                    <p class="phase-instruction">Cast your vote on your phones!</p>
+                    <div class="vote-progress-bar">
+                        <div class="progress-fill" style="width: ${(votesCast / Math.max(1, totalVoters)) * 100}%;"></div>
+                    </div>
+                    <p class="vote-progress">${votesCast} / ${totalVoters} Votes Cast</p>
+                    <div class="candidates-roster">
+                        ${(s.players || []).map((p: any) => `
+                            <div class="candidate-pill">
+                                <span class="c-avatar">${p.avatar}</span>
+                                <span class="c-name">${p.nickname}</span>
+                            </div>
+                        `).join("")}
+                    </div>
+                </div>
+            `;
+        } else if (s.phase === "VOTE_REVEAL" || s.phase === "REVEAL") {
+            const topName = s.top_voted_name || (s.winners && s.winners.length ? s.winners.join(", ") : "Everyone");
+            const topAv = s.top_voted_avatar || "👑";
+            return `
+                <div class="phase-card mostlikely-reveal-card">
+                    <div class="round-badge">ROUND ${s.round_number || 1} / ${s.max_rounds || 5}</div>
+                    <h2 class="mostlikely-prompt">"${promptText}"</h2>
+                    <div class="mostlikely-winner-banner">
+                        <span>🏆 MOST LIKELY:</span>
+                        <div class="winner-names">${topAv} ${topName}</div>
+                    </div>
+                    <div class="results-grid">
+                        ${(s.players || []).map((p: any) => {
+                            const count = s.vote_counts ? (s.vote_counts[p.id] || 0) : 0;
+                            const isWin = p.nickname === topName || (s.winners && s.winners.includes(p.nickname));
+                            return `
+                                <div class="result-tile ${isWin ? "is-winner" : ""}">
+                                    <div class="tile-header">
+                                        <span class="r-avatar">${p.avatar}</span>
+                                        <span class="r-name">${p.nickname}</span>
+                                        <span class="r-votes">${count} ${count === 1 ? "vote" : "votes"}</span>
+                                    </div>
+                                    <div class="p-score" style="font-size: 0.8rem; color: #aaa;">Score: ${p.score || 0} pts</div>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        } else if (s.phase === "GAME_OVER") {
+            return this.renderPodium("🥂 MOST LIKELY TO PODIUM 🥂");
+        }
+        return `<div>Most Likely Phase: ${s.phase}</div>`;
+    }
+
+    private renderWordBomb(): string {
+        const s = this.state!;
+        const currentPrompt = s.current_prompt || s.prompt || "...";
+        const holderName = s.holder_name || s.active_player_name || "Player";
+        const holderAv = s.holder_avatar || s.active_player_avatar || "👤";
+
+        if (s.phase === "ROUND_ACTIVE" || s.phase === "ROUND") {
+            const fusePct = Math.max(0, Math.min(100, ((s.phase_timer || 0) / 10) * 100));
+            return `
+                <div class="phase-card wordbomb-host-card">
+                    <div class="round-badge">ROUND ${s.round_number || 1} / ${s.max_rounds || 3}</div>
+                    <div class="wordbomb-bomb-wrap">
+                        <div class="bomb-emoji ${fusePct < 30 ? "urgent" : ""}">💣</div>
+                        <div class="wordbomb-prompt-display">
+                            <span class="prompt-hint">MUST CONTAIN:</span>
+                            <div class="prompt-letters">${currentPrompt}</div>
+                        </div>
+                    </div>
+                    <div class="bomb-holder-banner">
+                        <span class="holder-av">${holderAv}</span>
+                        <span class="holder-name">${holderName}</span>
+                        <span class="holder-badge">HAS THE BOMB!</span>
+                    </div>
+                    ${s.last_word ? `
+                        <div class="last-word-pill">
+                            Defused with: <strong>${s.last_word}</strong>!
+                        </div>
+                    ` : ""}
+                    <div class="wordbomb-roster">
+                        ${(s.players || []).map((p: any) => {
+                            const strikes = p.strikes || 0;
+                            const lives = Math.max(0, 3 - strikes);
+                            const isAlive = lives > 0;
+                            const isActive = p.is_holding_bomb || p.id === s.holder_id;
+                            return `
+                                <div class="wordbomb-player-tile ${!isAlive ? "eliminated" : ""} ${isActive ? "active-holder" : ""}">
+                                    <div class="p-info">${p.avatar} ${p.nickname}</div>
+                                    <div class="p-lives">${isAlive ? "❤️".repeat(lives) : "💀 OUT"}</div>
+                                    <div class="p-score">${p.score || 0} pts</div>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        } else if (s.phase === "EXPLOSION") {
+            const explodedName = s.last_exploded_player || s.exploded_player_name || "A player";
+            return `
+                <div class="phase-card wordbomb-explosion-card">
+                    <div class="explosion-icon">💥</div>
+                    <h1 class="explosion-heading">BOOOOOOM!</h1>
+                    <div class="exploded-player-banner">
+                        <span class="ex-name">${explodedName}</span>
+                        <span class="ex-sub">ran out of time and lost a life!</span>
+                    </div>
+                    <div class="wordbomb-roster" style="margin-top: 2rem;">
+                        ${(s.players || []).map((p: any) => {
+                            const strikes = p.strikes || 0;
+                            const lives = Math.max(0, 3 - strikes);
+                            const isAlive = lives > 0;
+                            return `
+                                <div class="wordbomb-player-tile ${!isAlive ? "eliminated" : ""}">
+                                    <div class="p-info">${p.avatar} ${p.nickname}</div>
+                                    <div class="p-lives">${isAlive ? "❤️".repeat(lives) : "💀 OUT"}</div>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        } else if (s.phase === "GAME_OVER") {
+            return this.renderPodium("💣 WORD BOMB SURVIVORS 💣");
+        }
+        return `<div>Word Bomb Phase: ${s.phase}</div>`;
     }
 }
