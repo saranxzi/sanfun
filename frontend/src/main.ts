@@ -1,6 +1,4 @@
 import './style.css'
-import { ArcadeEngine } from './engine/ArcadeEngine'
-import { GAME_REGISTRY, getGameById } from './games/index'
 import { PartyApp } from './party/PartyApp'
 
 const appEl = document.querySelector<HTMLDivElement>('#app')!;
@@ -13,11 +11,16 @@ if (isPartyHost || isPlayer) {
     const partyApp = new PartyApp(appEl);
     partyApp.init();
 } else {
-    // Render Arcade Collection + Couch Co-op Party Gateway
-    const gamesMetadata = Object.keys(GAME_REGISTRY).map(id => {
-        const instance = getGameById(id);
-        return instance?.manifest;
-    }).filter(Boolean);
+    // Dedicated Sanfun Party Lounge Portal
+    const partyGames = [
+        { id: "mafia", icon: "🕵️", title: "MAFIA", tagline: "Trust No One. Deceive Everyone.", players: "4-16 Players" },
+        { id: "imposter", icon: "🦎", title: "FIND THE IMPOSTER", tagline: "Blend In. Guess the Secret Word.", players: "3-16 Players" },
+        { id: "witclash", icon: "💥", title: "WITCLASH", tagline: "Hilarious Head-to-Head Joke Showdowns.", players: "3-16 Players" },
+        { id: "trivia", icon: "⚡", title: "TRIVIA BLITZ", tagline: "Lightning Trivia & Streak Multipliers.", players: "1-16 Players" },
+        { id: "doodledash", icon: "🎨", title: "DOODLEDASH", tagline: "Real-Time Drawing & Speed Guessing.", players: "2-16 Players" },
+        { id: "mostlikely", icon: "👑", title: "MOST LIKELY TO", tagline: "Vote, Roast & Crown Your Friends.", players: "3-16 Players" },
+        { id: "wordbomb", icon: "💣", title: "WORD BOMB", tagline: "Ticking Bomb Hot Potato Word Race.", players: "2-16 Players" },
+    ];
 
     appEl.innerHTML = `
       <div class="background-3d">
@@ -25,103 +28,77 @@ if (isPartyHost || isPlayer) {
         <div class="glow-horizon"></div>
       </div>
       
-      <div class="arcade-wrapper">
-        <div id="ui-overlay">
-          <div class="menu">
-            <div class="title-container">
-                <span class="arcade-subtitle">ARCADE & COUCH GAMING PLATFORM</span>
-                <h1>SANFUN ARCADE</h1>
-            </div>
-
-            <!-- Party Couch Co-op Gateway Banner -->
-            <div class="party-hero-banner">
-                <div class="party-hero-header">
-                    <span class="party-badge">COUCH CO-OP • NEW</span>
-                    <h2>SANFUN PARTY LOUNGE</h2>
-                </div>
-                <p>Play <strong>Mafia</strong>, <strong>Find the Imposter</strong>, <strong>WitClash</strong>, <strong>Trivia Blitz</strong> & <strong>DoodleDash</strong> on the TV with your friends using their phones as controllers!</p>
-                <div class="party-hero-buttons">
-                    <button class="btn-party-hero host" id="btn-host-party">
-                        🖥️ HOST PARTY (BIG SCREEN)
-                    </button>
-                    <button class="btn-party-hero join" id="btn-join-party">
-                        📱 JOIN ON PHONE
-                    </button>
-                </div>
-            </div>
-            
-            <div class="collection-divider">
-                <span>SINGLE & LOCAL 2P ARCADE CLASSICS</span>
-            </div>
-
-            <div class="game-grid">
-              ${gamesMetadata.map(m => `
-                <div class="game-card" data-game="${m?.id}">
-                  <h2>${m?.title.toUpperCase()}</h2>
-                  <p>${m?.description}</p>
-                  <button class="play-btn">COIN START</button>
-                </div>
-              `).join('')}
-            </div>
-            
-            <p class="hint">ESC: RETURN TO COLLECTION | WASD/ARROWS: MOVE | SPACE: ACTION</p>
+      <div class="party-portal-wrapper">
+        <div class="portal-container">
+          <div class="portal-header">
+            <span class="portal-tag">COUCH CO-OP & PARTY GAMING PLATFORM</span>
+            <h1 class="portal-title">SANFUN PARTY</h1>
+            <p class="portal-desc">Play hilarious party games on your TV using your friends' smartphones as controllers!</p>
           </div>
-        </div>
 
-        <div class="arcade-container" id="arcade-container" style="display: none;">
-          <div class="scanlines"></div>
-          <canvas id="game-canvas"></canvas>
+          <div class="portal-actions-grid">
+            <!-- Host Card -->
+            <div class="portal-card host-portal-card">
+              <div class="card-badge">FOR TV / BIG SCREEN</div>
+              <div class="card-icon">🖥️</div>
+              <h2>HOST A PARTY</h2>
+              <p>Create a game room on the big screen. A room code and QR code will be generated for your friends to join.</p>
+              <button class="btn-portal host" id="btn-host-lounge">
+                START PARTY LOUNGE
+              </button>
+            </div>
+
+            <!-- Join Card -->
+            <div class="portal-card join-portal-card">
+              <div class="card-badge">FOR SMARTPHONE / CONTROLLER</div>
+              <div class="card-icon">📱</div>
+              <h2>JOIN WITH CODE</h2>
+              <div class="join-quick-form">
+                <input type="text" id="quick-room-code" maxlength="4" placeholder="ROOM CODE (e.g. ABCD)" class="input-code" autocomplete="off" />
+                <input type="text" id="quick-nickname" maxlength="16" placeholder="YOUR NICKNAME" class="input-nick" autocomplete="off" />
+                <button class="btn-portal join" id="btn-quick-join">
+                  ENTER PARTY
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Featured Games Showcase -->
+          <div class="collection-divider">
+            <span>7 COUCH CO-OP PARTY GAMES INCLUDED</span>
+          </div>
+
+          <div class="portal-games-grid">
+            ${partyGames.map(g => `
+              <div class="portal-game-card">
+                <div class="portal-game-icon">${g.icon}</div>
+                <h3>${g.title}</h3>
+                <p class="portal-game-tagline">"${g.tagline}"</p>
+                <span class="portal-game-players">${g.players}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
       </div>
     `;
 
-    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-    const engine = new ArcadeEngine(canvas);
-    const overlay = document.getElementById('ui-overlay')!;
-    const cabinet = document.getElementById('arcade-container')!;
+    document.getElementById('btn-host-lounge')?.addEventListener('click', () => {
+        window.location.href = `${window.location.pathname}?party=host`;
+    });
 
-    const loadGame = (id: string) => {
-        const game = getGameById(id);
-        if (game) {
-            engine.loadGame(game, {});
-            overlay.style.opacity = '0';
-            setTimeout(() => {
-                overlay.style.display = 'none';
-                cabinet.style.display = 'flex';
-                engine.start();
-            }, 500);
+    const handleJoin = () => {
+        const code = (document.getElementById('quick-room-code') as HTMLInputElement)?.value.trim().toUpperCase();
+        const nick = (document.getElementById('quick-nickname') as HTMLInputElement)?.value.trim();
+        if (code.length === 4 && nick) {
+            localStorage.setItem("sanfun_player_nick", nick);
+            window.location.href = `${window.location.pathname}?join=${code}`;
+        } else {
+            alert("Please enter a 4-letter room code and your nickname.");
         }
     };
 
-    document.querySelectorAll('.game-card').forEach(card => {
-        card.addEventListener('click', (e) => {
-            const id = (e.currentTarget as HTMLDivElement).dataset.game;
-            if (id) loadGame(id);
-        });
-    });
-
-    const hostBtn = document.getElementById('btn-host-party');
-    if (hostBtn) {
-        hostBtn.addEventListener('click', () => {
-            window.location.href = `${window.location.pathname}?party=host`;
-        });
-    }
-
-    const joinBtn = document.getElementById('btn-join-party');
-    if (joinBtn) {
-        joinBtn.addEventListener('click', () => {
-            window.location.href = `${window.location.pathname}?party=player`;
-        });
-    }
-
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            engine.stop();
-            cabinet.style.display = 'none';
-            overlay.style.display = 'flex';
-            setTimeout(() => overlay.style.opacity = '1', 10);
-        }
+    document.getElementById('btn-quick-join')?.addEventListener('click', handleJoin);
+    document.getElementById('quick-nickname')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleJoin();
     });
 }
-
-
