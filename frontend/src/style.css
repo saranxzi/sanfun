@@ -856,6 +856,161 @@ input { font-family: var(--font-main); outline: none; border-radius: 8px; }
 .guess-form input { flex: 1; padding: 0.8rem; background: #111; border: 1px solid #444; color: #fff; }
 .guess-form button { padding: 0.8rem 1.2rem; background: var(--primary); color: #000; font-weight: bold; }
 
+/* Card Privacy & Imposter Mobile Elements */
+.imposter-wrapper-phone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  width: 100%;
+}
+.card-privacy-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+.btn-card-toggle {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ddd;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-card-toggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--primary);
+  color: #fff;
+}
+.imposter-card-phone {
+  background: rgba(18, 18, 30, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.25s ease;
+}
+.imposter-card-phone.card-hidden-state {
+  border-color: #555;
+  background: rgba(10, 10, 18, 0.95);
+}
+.card-hidden-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 0;
+}
+.card-hidden-overlay .lock-icon {
+  font-size: 2.8rem;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 0 10px rgba(255, 221, 0, 0.4));
+}
+.card-hidden-overlay h3 {
+  font-size: 1.3rem;
+  letter-spacing: 2px;
+  color: #bbb;
+  margin-bottom: 0.3rem;
+}
+.card-hidden-overlay .tap-note {
+  font-size: 0.8rem;
+  color: #777;
+}
+
+/* Imposter Hint */
+.imposter-hint-container {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+.btn-imposter-hint {
+  background: rgba(255, 221, 0, 0.15);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 0.85rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-imposter-hint:hover {
+  background: rgba(255, 221, 0, 0.3);
+  box-shadow: 0 0 14px rgba(255, 221, 0, 0.4);
+}
+.imposter-hint-box {
+  background: rgba(20, 15, 35, 0.9);
+  border: 1px dashed var(--accent);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  width: 100%;
+  text-align: center;
+  animation: hint-fade 0.3s ease-out;
+}
+@keyframes hint-fade {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hint-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.hint-text {
+  font-size: 0.9rem;
+  color: #eee;
+  line-height: 1.4;
+}
+
+/* Host Game Over Actions */
+.gameover-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1.2rem;
+  margin-top: 2rem;
+}
+.btn-play-again {
+  background: linear-gradient(135deg, var(--primary), #00a8ff);
+  color: #000;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 900;
+  padding: 0.9rem 2.2rem;
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.4);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-play-again:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 0 32px rgba(0, 240, 255, 0.7);
+}
+.btn-secondary-lobby {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 800;
+  padding: 0.9rem 1.8rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-secondary-lobby:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: #aaa;
+}
+
 @media (max-width: 800px) {
   .lobby-main-grid { grid-template-columns: 1fr; }
   .answers-battle { grid-template-columns: 1fr; }

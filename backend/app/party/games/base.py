@@ -13,14 +13,14 @@ class BasePartyGame(ABC):
     min_players: int = 3
     max_players: int = 12
 
-    def __init__(self, room_code: str, players: Dict[str, PlayerInfo]):
+    def __init__(self, room_code: str, players: Dict[str, PlayerInfo], **kwargs):
         self.room_code = room_code
         self.players = {pid: p.model_copy() for pid, p in players.items()}
         self.phase: str = "INIT"
         self.phase_timer: float = 0.0
         self.round_number: int = 1
         self.max_rounds: int = 3
-        self.scores: Dict[str, int] = {pid: 0 for pid in players}
+        self.scores: Dict[str, int] = {pid: (players[pid].score if pid in players else 0) for pid in players}
         self.is_over: bool = False
 
     @abstractmethod

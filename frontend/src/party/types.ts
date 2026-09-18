@@ -65,6 +65,7 @@ export interface PlayerGameState {
     my_role?: string;
     is_imposter?: boolean;
     secret_word?: string;
+    imposter_hint?: string | null;
     my_prompts?: any[];
     candidates?: any[];
     my_vote?: any;

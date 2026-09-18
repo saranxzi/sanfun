@@ -360,3 +360,90 @@ def test_wordbomb_word_validation():
     assert game.scores[active_pid] > 0
 
 
+def test_imposter_word_packs_comprehensive():
+    from app.party.games.imposter import WORD_PACKS, WORD_PACKS_HINTS, HINTS_BY_WORD
+    assert len(WORD_PACKS) >= 12
+    total_words = sum(len(words) for words in WORD_PACKS.values())
+    assert total_words >= 250, f"Expected at least 250 words, got {total_words}"
+    # Verify all words have a non-empty hint
+    for cat, pairs in WORD_PACKS_HINTS.items():
+        for word, hint in pairs:
+            assert len(word) > 1
+            assert len(hint) > 10
+            assert HINTS_BY_WORD[word] == hint
+
+
+def test_imposter_fair_rotation():
+    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(4)}
+    recent_imposters = []
+    
+    # Run 4 rounds with fair rotation tracking
+    chosen_history = []
+    for _ in range(4):
+        game = ImposterGame("TEST", players, recent_imposters=recent_imposters)
+        game.start()
+        chosen = game.imposter_ids[0]
+        chosen_history.append(chosen)
+        recent_imposters.append(chosen)
+
+    # In 4 rounds with 4 players, no player should be picked twice consecutively
+    for i in range(len(chosen_history) - 1):
+        assert chosen_history[i] != chosen_history[i + 1]
+    # All 4 players should have had a turn
+    assert set(chosen_history) == {"p0", "p1", "p2", "p3"}
+
+
+def test_imposter_clue_order_and_hint_role_masking():
+    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(4)}
+    game = ImposterGame("TEST", players)
+    game.start()
+
+    # Verify clue order contains all players
+    assert len(game.clue_order) == 4
+    assert set(game.clue_order) == {"p0", "p1", "p2", "p3"}
+    # Verify speaker #0 is NOT an imposter when >= 3 players
+    assert game.clue_order[0] not in game.imposter_ids
+
+    # Verify role masking on hint
+    imp_id = game.imposter_ids[0]
+    imp_state = game.get_player_state(imp_id)
+    assert imp_state["is_imposter"] is True
+    assert imp_state["secret_word"] == "???"
+    assert imp_state["imposter_hint"] is not None
+    assert len(imp_state["imposter_hint"]) > 5
+
+    crew_id = [pid for pid in players if pid != imp_id][0]
+    crew_state = game.get_player_state(crew_id)
+    assert crew_state["is_imposter"] is False
+    assert crew_state["secret_word"] == game.secret_word
+    assert crew_state["imposter_hint"] is None
+
+    # Big screen TV state never leaks secret word or hint during WORD_REVEAL
+    host_state = game.get_host_state()
+    assert host_state["secret_word"] is None
+    assert "imposter_hint" not in host_state
+
+
+@pytest.mark.asyncio
+async def test_imposter_score_persistence_across_rounds():
+    room = room_manager.create_room()
+    room.selected_game_id = "imposter"
+    for i in range(3):
+        room.add_player(f"User_{i}")
+
+    await room.start_game()
+    assert room.state == "IN_GAME"
+    g1 = room.game_instance
+    pid0 = list(room.players.keys())[0]
+    g1.scores[pid0] = 500
+
+    # Start next round (Play Again)
+    await room.start_game()
+    g2 = room.game_instance
+    assert g2 is not g1
+    # Scores should persist
+    assert g2.scores[pid0] == 500
+    assert room.players[pid0].score == 500
+
+
+

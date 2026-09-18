@@ -27,6 +27,7 @@ class PartyRoom:
         self.selected_game_id: str = "mafia"
         self.game_instance: Optional[BasePartyGame] = None
         self.state: str = "LOBBY"  # LOBBY | IN_GAME
+        self.recent_imposters: List[str] = []
         self.created_at: float = time.time()
         self.last_activity: float = time.time()
 
@@ -100,14 +101,39 @@ class PartyRoom:
         if not meta or len(self.players) < meta["min_players"]:
             return False
 
-        self.game_instance = create_game(self.selected_game_id, self.code, self.players)
+        # If previous round had scores, persist them in self.players
+        if self.game_instance and hasattr(self.game_instance, "scores"):
+            for pid, score in self.game_instance.scores.items():
+                if pid in self.players:
+                    self.players[pid].score = score
+
+        self.game_instance = create_game(
+            self.selected_game_id,
+            self.code,
+            self.players,
+            recent_imposters=self.recent_imposters
+        )
         self.game_instance.start()
+
+        # Track recent imposters across rounds
+        if hasattr(self.game_instance, "imposter_ids"):
+            for imp in self.game_instance.imposter_ids:
+                if imp not in self.recent_imposters:
+                    self.recent_imposters.append(imp)
+            if len(self.recent_imposters) >= len(self.players):
+                self.recent_imposters = self.recent_imposters[-len(self.players):]
+
         self.state = "IN_GAME"
         await self.broadcast_game_state()
         await self.broadcast_event("GAME_STARTED", {"game_id": self.selected_game_id})
         return True
 
     async def back_to_lobby(self):
+        # Sync scores back before clearing game instance
+        if self.game_instance and hasattr(self.game_instance, "scores"):
+            for pid, score in self.game_instance.scores.items():
+                if pid in self.players:
+                    self.players[pid].score = score
         self.state = "LOBBY"
         self.game_instance = None
         await self.broadcast_room_state()

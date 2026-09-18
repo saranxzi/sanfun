@@ -100,7 +100,25 @@ export class HostGameView {
             if (confirm("Return to party lobby? Current game will end.")) this.socket.send("BACK_TO_LOBBY");
         });
 
+        this.container.querySelector("#btn-play-again")?.addEventListener("click", () => {
+            soundManager.playStart();
+            this.socket.send("START_GAME");
+        });
+
+        this.container.querySelector("#btn-gameover-lobby")?.addEventListener("click", () => {
+            this.socket.send("BACK_TO_LOBBY");
+        });
+
         if (this.state.game_id === "doodledash") this.drawHostCanvasStrokes();
+    }
+
+    private renderGameOverActions(): string {
+        return `
+            <div class="gameover-actions">
+                <button id="btn-play-again" class="btn-play-again">🔄 PLAY AGAIN</button>
+                <button id="btn-gameover-lobby" class="btn-secondary-lobby">🏠 BACK TO LOBBY</button>
+            </div>
+        `;
     }
 
     private renderPodium(title: string): string {
@@ -118,6 +136,7 @@ export class HostGameView {
                         </div>
                     `).join("")}
                 </div>
+                ${this.renderGameOverActions()}
             </div>
         `;
     }
@@ -226,6 +245,7 @@ export class HostGameView {
                             <div class="summary-row">${p.avatar} ${p.nickname} <span class="role-tag">${p.role_revealed || "VILLAGER"}</span> (+${p.score} pts)</div>
                         `).join("")}
                     </div>
+                    ${this.renderGameOverActions()}
                 </div>
             `;
         }
@@ -283,6 +303,7 @@ export class HostGameView {
                             <div class="summary-row">${p.avatar} ${p.nickname} <span class="role-tag">${p.is_imposter ? "IMPOSTER" : "CREW"}</span> (+${p.score} pts)</div>
                         `).join("")}
                     </div>
+                    ${this.renderGameOverActions()}
                 </div>
             `;
         }

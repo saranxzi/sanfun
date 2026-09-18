@@ -10,6 +10,8 @@ export class PlayerController {
     private timerInterval: number | null = null;
     private isDrawing: boolean = false;
     private lastDrawPt: { x: number; y: number } | null = null;
+    private cardHidden: boolean = false;
+    private hintRevealed: boolean = false;
 
     constructor(container: HTMLElement, socket: PartySocket) {
         this.container = container;
@@ -47,6 +49,11 @@ export class PlayerController {
             this.startLocalTimer();
         } else if (typeof merged.phase_timer === "number" && Math.abs(this.currentTimer - merged.phase_timer) > 2) {
             this.currentTimer = merged.phase_timer;
+        }
+
+        if (newPhase === "WORD_REVEAL" && prevPhase !== "WORD_REVEAL") {
+            this.cardHidden = false;
+            this.hintRevealed = false;
         }
 
         this.state = merged;
@@ -250,14 +257,47 @@ export class PlayerController {
         const s = this.state!;
         if (s.phase === "WORD_REVEAL" || s.phase === "CLUE_ROUNDS") {
             return `
-                <div class="imposter-card-phone" style="padding: 2rem; text-align: center;">
-                    <div class="cat-pill">CATEGORY: ${s.category}</div>
-                    ${s.is_imposter ? `
-                        <h2 style="color: #ff0055; margin-bottom: 0.6rem;">YOU ARE THE IMPOSTER! 🦎</h2>
-                        <p style="color: #aaa; font-size: 0.85rem;">You do not know the secret word. Blend in and listen closely!</p>
+                <div class="imposter-wrapper-phone">
+                    <div class="card-privacy-bar">
+                        <button id="btn-toggle-card" class="btn-card-toggle">
+                            ${this.cardHidden ? "👁️ REVEAL CARD" : "🙈 HIDE CARD"}
+                        </button>
+                    </div>
+
+                    ${this.cardHidden ? `
+                        <div class="imposter-card-phone card-hidden-state" id="card-box-toggle">
+                            <div class="cat-pill">CATEGORY: ${s.category}</div>
+                            <div class="card-hidden-overlay">
+                                <div class="lock-icon">🔒</div>
+                                <h3>CARD HIDDEN</h3>
+                                <p class="tap-note">Tap here to view your secret role</p>
+                            </div>
+                        </div>
                     ` : `
-                        <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.4rem;">SECRET WORD</div>
-                        <h2 style="color: var(--green); font-size: 2rem;">${s.secret_word}</h2>
+                        <div class="imposter-card-phone" id="card-box-toggle">
+                            <div class="cat-pill">CATEGORY: ${s.category}</div>
+                            ${s.is_imposter ? `
+                                <h2 style="color: #ff0055; margin-bottom: 0.6rem;">YOU ARE THE IMPOSTER! 🦎</h2>
+                                <p style="color: #aaa; font-size: 0.85rem; margin-bottom: 1.2rem;">You do not know the secret word. Blend in, listen carefully, and bluff!</p>
+                                
+                                <!-- Imposter-only Hint Feature -->
+                                <div class="imposter-hint-container">
+                                    <button id="btn-toggle-hint" class="btn-imposter-hint">
+                                        ${this.hintRevealed ? "💡 HIDE HINT" : "💡 REVEAL HINT"}
+                                    </button>
+                                    ${this.hintRevealed && s.imposter_hint ? `
+                                        <div class="imposter-hint-box">
+                                            <span class="hint-label">CONFIDENTIAL CLUE:</span>
+                                            <p class="hint-text">${s.imposter_hint}</p>
+                                        </div>
+                                    ` : ""}
+                                </div>
+                            ` : `
+                                <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.4rem;">SECRET WORD</div>
+                                <h2 style="color: var(--green); font-size: 2.2rem; margin-bottom: 0.8rem; letter-spacing: 1px;">${s.secret_word}</h2>
+                                <p style="color: #888; font-size: 0.8rem;">Keep this word hidden from the imposter!</p>
+                            `}
+                        </div>
                     `}
                 </div>
             `;
@@ -277,6 +317,17 @@ export class PlayerController {
                 `;
             }
             return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>The Imposter is guessing...</p></div>`;
+        } else if (s.phase === "GAME_OVER") {
+            return `
+                <div class="panel-glass gameover-phone" style="padding: 2rem; text-align: center;">
+                    <h2>ROUND FINISHED! 🏆</h2>
+                    <div class="player-score-badge" style="margin: 1rem 0; font-size: 1.2rem; color: var(--primary);">
+                        Current Score: <strong>${s.score || 0} pts</strong>
+                    </div>
+                    <p style="color: #aaa; font-size: 0.85rem;">Look at the Big Screen for final results!</p>
+                    <p style="color: #666; font-size: 0.8rem; margin-top: 0.8rem;">Waiting for host to start the next round...</p>
+                </div>
+            `;
         }
         return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
@@ -555,6 +606,28 @@ export class PlayerController {
                 const choice = parseInt((e.currentTarget as HTMLElement).dataset.choice || "0", 10);
                 this.socket.send("GAME_ACTION", { action: "SUBMIT_ANSWER", data: { choice } });
             });
+        });
+
+        // Imposter card privacy toggle
+        this.container.querySelector("#btn-toggle-card")?.addEventListener("click", () => {
+            this.cardHidden = !this.cardHidden;
+            this.render();
+        });
+
+        const cardBox = this.container.querySelector("#card-box-toggle");
+        if (cardBox) {
+            cardBox.addEventListener("click", (e) => {
+                if ((e.target as HTMLElement).closest("#btn-toggle-hint")) return;
+                this.cardHidden = !this.cardHidden;
+                this.render();
+            });
+        }
+
+        // Imposter hint toggle
+        this.container.querySelector("#btn-toggle-hint")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.hintRevealed = !this.hintRevealed;
+            this.render();
         });
 
         // Imposter guess
