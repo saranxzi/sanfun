@@ -20,6 +20,8 @@ The host screen runs at `http://localhost:8000?party=host`. Players join by scan
 - WitClash (comedy prompt battle)
 - Trivia Blitz (speed quiz)
 - DoodleDash (draw and guess)
+- Most Likely To (friend superlatives)
+- Word Bomb (rapid-fire word chain)
 
 ## Tests
 ```bash
