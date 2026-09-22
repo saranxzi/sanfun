@@ -42,8 +42,8 @@ class MostLikelyGame(BasePartyGame):
     min_players = 3
     max_players = 16
 
-    def __init__(self, room_code: str, players: Dict[str, PlayerInfo]):
-        super().__init__(room_code, players)
+    def __init__(self, room_code: str, players: Dict[str, PlayerInfo], **kwargs):
+        super().__init__(room_code, players, **kwargs)
         self.max_rounds = min(5, max(3, len(players)))
         self.question_deck: List[str] = []
         self.current_question: str = ""

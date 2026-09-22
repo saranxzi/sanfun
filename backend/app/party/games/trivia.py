@@ -67,8 +67,8 @@ class TriviaGame(BasePartyGame):
     min_players = 1
     max_players = 16
 
-    def __init__(self, room_code: str, players: Dict[str, PlayerInfo]):
-        super().__init__(room_code, players)
+    def __init__(self, room_code: str, players: Dict[str, PlayerInfo], **kwargs):
+        super().__init__(room_code, players, **kwargs)
         self.questions: List[Dict[str, Any]] = []
         self.current_idx: int = 0
         self.answers: Dict[str, Dict[str, Any]] = {}  # pid -> {choice: int, time_left: float}

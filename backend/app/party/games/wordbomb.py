@@ -21,8 +21,8 @@ class WordBombGame(BasePartyGame):
     min_players = 2
     max_players = 16
 
-    def __init__(self, room_code: str, players: Dict[str, PlayerInfo]):
-        super().__init__(room_code, players)
+    def __init__(self, room_code: str, players: Dict[str, PlayerInfo], **kwargs):
+        super().__init__(room_code, players, **kwargs)
         self.player_order: List[str] = list(players.keys())
         self.current_turn_idx: int = 0
         self.current_prompt: str = ""

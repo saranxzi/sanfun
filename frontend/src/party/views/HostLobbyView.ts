@@ -209,7 +209,7 @@ export class HostLobbyView {
 
                         <!-- Action Bar -->
                         <div class="lobby-action-bar">
-                            <button id="btn-back-arcade" class="btn-secondary">EXIT TO ARCADE</button>
+                            <button id="btn-back-arcade" class="btn-secondary">EXIT TO LOUNGE</button>
                             <button id="btn-start-game" class="btn-start-game" ${canStart ? "" : "disabled"}>
                                 START ${selectedGame.name.toUpperCase()}
                             </button>

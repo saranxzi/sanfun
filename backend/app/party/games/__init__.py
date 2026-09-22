@@ -40,9 +40,4 @@ def create_game(game_id: str, room_code: str, players: Dict[str, PlayerInfo], **
     cls = GAME_CLASSES.get(game_id)
     if not cls:
         raise ValueError(f"Unknown game ID: {game_id}")
-    import inspect
-    sig = inspect.signature(cls.__init__)
-    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values()):
-        return cls(room_code=room_code, players=players, **kwargs)
-    filtered = {k: v for k, v in kwargs.items() if k in sig.parameters}
-    return cls(room_code=room_code, players=players, **filtered)
+    return cls(room_code=room_code, players=players, **kwargs)

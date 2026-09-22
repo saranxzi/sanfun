@@ -42,8 +42,8 @@ class WitClashGame(BasePartyGame):
     min_players = 3
     max_players = 16
 
-    def __init__(self, room_code: str, players: Dict[str, PlayerInfo]):
-        super().__init__(room_code, players)
+    def __init__(self, room_code: str, players: Dict[str, PlayerInfo], **kwargs):
+        super().__init__(room_code, players, **kwargs)
         self.prompts: List[Dict[str, Any]] = []  # [{id, text, p1_id, p2_id, a1, a2, votes: {voter_id: 1 or 2}}]
         self.matchup_index: int = 0
         self.submissions: Dict[str, Dict[int, str]] = {}  # pid -> {prompt_id: text}

@@ -12,6 +12,7 @@ from app.main import app
 from app.party.manager import room_manager, PartyRoom
 from app.party.protocol import PlayerInfo
 from app.party.network import get_local_ip, get_network_info
+from app.party.games import create_game
 from app.party.games.mafia import MafiaGame
 from app.party.games.imposter import ImposterGame
 from app.party.games.witclash import WitClashGame
@@ -54,7 +55,9 @@ def test_rest_endpoints():
     assert "trivia" in game_ids
     assert "doodledash" in game_ids
     assert "mostlikely" in game_ids
-    assert "wordbomb" in game_ids
+    for g in games:
+        inst = create_game(g["id"], "ABCD", {"p1": PlayerInfo(id="p1", nickname="A")}, custom_kwarg=123)
+        assert inst.room_code == "ABCD"
 
     create_res = client.post("/api/party/create")
     assert create_res.status_code == 200

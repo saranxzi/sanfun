@@ -190,14 +190,9 @@ class PartyRoom:
 
 
 class PartyRoomManager:
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(PartyRoomManager, cls).__new__(cls)
-            cls._instance.rooms = {}
-            cls._instance.tick_task = None
-        return cls._instance
+    def __init__(self):
+        self.rooms: Dict[str, PartyRoom] = {}
+        self.tick_task = None
 
     def generate_room_code(self) -> str:
         # Avoid ambiguous characters (0, O, 1, I, L)

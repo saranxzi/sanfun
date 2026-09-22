@@ -20,8 +20,8 @@ class MafiaGame(BasePartyGame):
     ROLE_DETECTIVE = "DETECTIVE"
     ROLE_VILLAGER = "VILLAGER"
 
-    def __init__(self, room_code: str, players: Dict[str, PlayerInfo]):
-        super().__init__(room_code, players)
+    def __init__(self, room_code: str, players: Dict[str, PlayerInfo], **kwargs):
+        super().__init__(room_code, players, **kwargs)
         self.roles: Dict[str, str] = {}
         self.alive_players: set = set(self.players.keys())
         

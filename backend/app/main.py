@@ -52,15 +52,9 @@ async def health_check(request: Request):
 
 
 # Serve static frontend dist if built
-candidate_paths = [
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist")),
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../frontend/dist")),
-    os.path.abspath(os.path.join(os.getcwd(), "../frontend/dist")),
-    os.path.abspath(os.path.join(os.getcwd(), "frontend/dist")),
-]
-dist_path = next((p for p in candidate_paths if os.path.isdir(p)), None)
+dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
 
-if dist_path:
+if os.path.isdir(dist_path):
     assets_dir = os.path.join(dist_path, "assets")
     if os.path.isdir(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")

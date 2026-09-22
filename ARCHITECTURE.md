@@ -26,6 +26,8 @@ graph TD
             WitClash["WitClash (Quiplash-style)<br/>Head-to-head comedy prompt battle"]
             Trivia["Trivia Blitz<br/>Fast buzzer quiz with speed scoring"]
             Doodle["DoodleDash<br/>Real-time vector stroke streaming"]
+            MostLikely["Most Likely To<br/>Social voting and roast showdown"]
+            WordBomb["Word Bomb<br/>Rapid-fire word chain under pressure"]
         end
     end
 
@@ -56,8 +58,8 @@ graph TD
 - **Docker Compose**: Containerized multi-stage build running the entire platform in a single container.
 - **Remote Internet Bridge**: Includes optional Cloudflare Tunnel (`cloudflared`) profile in `docker-compose.yml` for remote friends across the internet without router port forwarding.
 
-## 4. Frontend Engine & Canvas Architecture
-1. **ArcadeEngine Loop**: A single `requestAnimationFrame` loop for local 2P and single-player games.
-2. **Party Controller Engine**: Touch-optimized mobile UI with contextual screens (Mafia kill/heal/investigate buttons, Imposter peek cards, WitClash prompt inputs, Trivia 4-shape buzzers, DoodleDash drawing canvas).
+## 4. Frontend & Controller Architecture
+1. **Party Lounge Portal**: Landing hub enabling quick host creation and phone joining via room code.
+2. **Party Controller Engine**: Touch-optimized mobile UI with contextual screens (Mafia kill/heal/investigate buttons, Imposter peek cards, WitClash prompt inputs, Trivia 4-shape buzzers, DoodleDash drawing canvas, Most Likely voting chips, Word Bomb rapid input).
 3. **Web Audio API Synthesizer**: Zero-dependency procedural synth producing 8-bit retro arcade sounds (join blips, timer ticks, gongs, victory fanfares) offline.
 

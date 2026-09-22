@@ -5,8 +5,12 @@ import re
 import socket
 import subprocess
 import threading
+import shutil
 import asyncio
 from typing import List, Dict, Any, Optional
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+TUNNEL_FILE = os.path.join(ROOT_DIR, ".tunnel_url")
 
 
 def get_local_ip() -> str:
@@ -57,22 +61,14 @@ def get_active_tunnel_url() -> Optional[str]:
     if env_tunnel:
         return env_tunnel
 
-    # Check candidate .tunnel_url file paths
-    candidate_paths = [
-        os.path.abspath(".tunnel_url"),
-        os.path.abspath("../.tunnel_url"),
-        os.path.abspath("../../.tunnel_url"),
-        os.path.join(os.path.dirname(__file__), "../../../.tunnel_url"),
-    ]
-    for p in candidate_paths:
-        if os.path.isfile(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    content = f.read().strip()
-                    if content.startswith("http"):
-                        return content
-            except Exception:
-                pass
+    if os.path.isfile(TUNNEL_FILE):
+        try:
+            with open(TUNNEL_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content.startswith("http"):
+                    return content
+        except Exception:
+            pass
     return None
 
 
@@ -91,17 +87,8 @@ class CloudflareTunnelManager:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def _find_cloudflared_exe(self) -> Optional[str]:
-        candidates = [
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../cloudflared.exe")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../cloudflared.exe")),
-            os.path.abspath("cloudflared.exe"),
-            os.path.abspath("../cloudflared.exe"),
-        ]
-        for c in candidates:
-            if os.path.isfile(c):
-                return c
-        import shutil
-        return shutil.which("cloudflared")
+        exe = os.path.join(ROOT_DIR, "cloudflared.exe")
+        return exe if os.path.isfile(exe) else shutil.which("cloudflared")
 
     def _kill_existing_instances(self):
         """Kills any orphaned cloudflared processes to avoid tunnel collision and rate limiting."""
@@ -170,11 +157,8 @@ class CloudflareTunnelManager:
                     os.environ["PUBLIC_TUNNEL_URL"] = self.tunnel_url
 
                     # Write to root .tunnel_url file
-                    root_tunnel_file = os.path.abspath(
-                        os.path.join(os.path.dirname(__file__), "../../../.tunnel_url")
-                    )
                     try:
-                        with open(root_tunnel_file, "w", encoding="utf-8") as f:
+                        with open(TUNNEL_FILE, "w", encoding="utf-8") as f:
                             f.write(self.tunnel_url)
                     except Exception:
                         pass
@@ -219,19 +203,11 @@ class CloudflareTunnelManager:
         _registered_tunnel_url = None
         self._kill_existing_instances()
 
-        # Clean up candidate .tunnel_url files
-        candidate_paths = [
-            os.path.abspath(".tunnel_url"),
-            os.path.abspath("../.tunnel_url"),
-            os.path.abspath("../../.tunnel_url"),
-            os.path.join(os.path.dirname(__file__), "../../../.tunnel_url"),
-        ]
-        for p in candidate_paths:
-            if os.path.isfile(p):
-                try:
-                    os.remove(p)
-                except Exception:
-                    pass
+        if os.path.isfile(TUNNEL_FILE):
+            try:
+                os.remove(TUNNEL_FILE)
+            except Exception:
+                pass
 
 
 tunnel_manager = CloudflareTunnelManager(port=8000)
