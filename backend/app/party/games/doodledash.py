@@ -75,7 +75,7 @@ class DoodleDashGame(BasePartyGame):
                     stroke = data.get("stroke")
                     if stroke:
                         self.strokes.append(stroke)
-                        return {"broadcast": True, "event": "STROKE", "stroke": stroke}
+                        return {"broadcast": False, "event": "STROKE", "stroke": stroke}
                 elif action == "CLEAR_CANVAS":
                     self.strokes.clear()
                     return {"broadcast": True, "event": "CLEAR"}

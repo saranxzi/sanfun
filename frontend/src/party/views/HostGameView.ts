@@ -35,6 +35,39 @@ export class HostGameView {
         }
     }
 
+    public handleGameEvent(event: { event: string; [key: string]: any }) {
+        if (event.event === "STROKE" && event.stroke) {
+            this.appendHostStroke(event.stroke);
+        } else if (event.event === "CLEAR") {
+            const canvas = this.container.querySelector("#host-doodle-canvas") as HTMLCanvasElement;
+            if (canvas) {
+                const ctx = canvas.getContext("2d");
+                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+    }
+
+    private appendHostStroke(s: any) {
+        const canvas = this.container.querySelector("#host-doodle-canvas") as HTMLCanvasElement;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = "#00f0ff";
+        const scaleX = canvas.width / 320;
+        const scaleY = canvas.height / 280;
+
+        if (s.type === "start") {
+            ctx.beginPath();
+            ctx.moveTo(s.x * scaleX, s.y * scaleY);
+        } else if (s.type === "move") {
+            ctx.lineTo(s.x * scaleX, s.y * scaleY);
+            ctx.stroke();
+        }
+    }
+
     private startLocalTimer() {
         if (this.timerInterval) clearInterval(this.timerInterval);
         this.timerInterval = window.setInterval(() => {

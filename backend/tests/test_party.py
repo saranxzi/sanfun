@@ -246,9 +246,10 @@ def test_doodledash_guess_matching():
     game.drawer_order = ["p0", "p1"]
     game.current_drawer_idx = 0
 
-    # Stroke drawing
+    # Stroke drawing: streams lightweight STROKE event without full-state broadcast
     res = game.handle_action("p0", "DRAW_STROKE", {"stroke": {"points": [[10, 10], [20, 20]], "color": "#ff0000"}})
-    assert res.get("broadcast") is True
+    assert res.get("event") == "STROKE"
+    assert res.get("broadcast") is False
 
     # Exact guess
     word = game.secret_word
@@ -361,6 +362,20 @@ def test_wordbomb_word_validation():
     assert game.current_holder_id == other_pid
     assert "TRAIN" in game.used_words
     assert game.scores[active_pid] > 0
+
+
+def test_wordbomb_skips_eliminated_players():
+    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"P_{i}") for i in range(3)}
+    game = WordBombGame("TEST", players)
+    game.start()
+
+    # Eliminate player
+    eliminated_pid = game.player_order[0]
+    game.strikes[eliminated_pid] = 3
+    game.current_turn_idx = 0
+    # Must skip eliminated player
+    assert game.current_holder_id != eliminated_pid
+    assert game.current_holder_id in [game.player_order[1], game.player_order[2]]
 
 
 def test_imposter_word_packs_comprehensive():

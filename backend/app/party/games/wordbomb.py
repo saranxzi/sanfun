@@ -52,10 +52,16 @@ class WordBombGame(BasePartyGame):
         self.turn_count += 1
 
     @property
+    def active_player_order(self) -> List[str]:
+        active = [pid for pid in self.player_order if self.strikes.get(pid, 0) < 3]
+        return active if active else self.player_order
+
+    @property
     def current_holder_id(self) -> str:
-        if not self.player_order:
+        active = self.active_player_order
+        if not active:
             return ""
-        return self.player_order[self.current_turn_idx % len(self.player_order)]
+        return active[self.current_turn_idx % len(active)]
 
     def on_timer_expired(self) -> Optional[str]:
         if self.phase == "ROUND_ACTIVE":
@@ -63,6 +69,15 @@ class WordBombGame(BasePartyGame):
             exploded_id = self.current_holder_id
             self.last_exploded_player = self.players[exploded_id].nickname if exploded_id in self.players else None
             self.strikes[exploded_id] = self.strikes.get(exploded_id, 0) + 1
+
+            active_remaining = [pid for pid in self.player_order if self.strikes.get(pid, 0) < 3]
+            if len(active_remaining) <= 1:
+                if active_remaining:
+                    self.scores[active_remaining[0]] = self.scores.get(active_remaining[0], 0) + 300
+                self.phase = "GAME_OVER"
+                self.is_over = True
+                return self.phase
+
             self.phase = "EXPLOSION"
             self.phase_timer = 4.0
             return self.phase

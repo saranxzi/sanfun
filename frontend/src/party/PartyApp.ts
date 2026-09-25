@@ -55,6 +55,10 @@ export class PartyApp {
                 this.hostGameView?.updateTimerTick(payload.phase_timer);
             };
 
+            this.socket.onGameEvent = (event: { event: string; [key: string]: any }) => {
+                this.hostGameView?.handleGameEvent(event);
+            };
+
             this.socket.connect();
         } catch (e) {
             console.error("Failed to initialize host room", e);

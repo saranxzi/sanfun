@@ -58,7 +58,12 @@ export class PlayerController {
 
         this.state = merged;
 
-        // Preserve form inputs across renders
+        // Preserve form inputs and active focus across renders
+        const activeEl = document.activeElement as HTMLInputElement;
+        const activeId = (activeEl && activeEl.id) ? activeEl.id : null;
+        const selStart = activeEl?.selectionStart;
+        const selEnd = activeEl?.selectionEnd;
+
         const savedInputs: Record<string, string> = {};
         this.container.querySelectorAll("input").forEach(input => {
             if (input.id) savedInputs[input.id] = input.value;
@@ -70,6 +75,16 @@ export class PlayerController {
             const input = this.container.querySelector(`#${id}`) as HTMLInputElement;
             if (input && !input.value) input.value = val;
         });
+
+        if (activeId) {
+            const el = this.container.querySelector(`#${activeId}`) as HTMLInputElement;
+            if (el) {
+                el.focus();
+                if (selStart !== null && selStart !== undefined && selEnd !== null && selEnd !== undefined) {
+                    try { el.setSelectionRange(selStart, selEnd); } catch {}
+                }
+            }
+        }
     }
 
     public updateTimerTick(phaseTimer: number) {
@@ -673,13 +688,18 @@ export class PlayerController {
                     this.socket.send("GAME_ACTION", { action: "DRAW_STROKE", data: { stroke: { type: "start", x: pt.x, y: pt.y } } });
                 });
 
+                let lastEmitTime = 0;
                 canvas.addEventListener("pointermove", (e) => {
                     if (!this.isDrawing || !this.lastDrawPt) return;
                     const pt = getPt(e);
                     ctx.lineTo(pt.x, pt.y);
                     ctx.stroke();
                     this.lastDrawPt = pt;
-                    this.socket.send("GAME_ACTION", { action: "DRAW_STROKE", data: { stroke: { type: "move", x: pt.x, y: pt.y } } });
+                    const now = performance.now();
+                    if (now - lastEmitTime >= 16) {
+                        lastEmitTime = now;
+                        this.socket.send("GAME_ACTION", { action: "DRAW_STROKE", data: { stroke: { type: "move", x: pt.x, y: pt.y } } });
+                    }
                 });
 
                 const stopDraw = () => {
