@@ -55,7 +55,7 @@ export class HostGameView {
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.lineWidth = 6;
-        ctx.strokeStyle = "#00f0ff";
+        ctx.strokeStyle = "#1e293b";
         const scaleX = canvas.width / 320;
         const scaleY = canvas.height / 280;
 
@@ -185,7 +185,7 @@ export class HostGameView {
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.lineWidth = 6;
-        ctx.strokeStyle = "#00f0ff";
+        ctx.strokeStyle = "#1e293b";
 
         const scaleX = canvas.width / 320;
         const scaleY = canvas.height / 280;

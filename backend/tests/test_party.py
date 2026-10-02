@@ -464,4 +464,13 @@ async def test_imposter_score_persistence_across_rounds():
     assert room.players[pid0].score == 500
 
 
+def test_player_palette_assignment():
+    from app.party.manager import COLORS
+    room = room_manager.create_room()
+    p, _ = room.add_player("Player1")
+    assert p.color in COLORS
+    assert p.color.startswith("#")
+
+
+
 

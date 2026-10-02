@@ -13,7 +13,7 @@ from app.party.network import get_network_info
 
 
 AVATARS = ["🦊", "🐼", "🦁", "🐯", "🐨", "🐸", "🐙", "🦄", "🤖", "👾", "🦖", "🚀"]
-COLORS = ["#ff0055", "#00f0ff", "#ffdd00", "#00ff66", "#aa00ff", "#ff7700", "#0099ff", "#ff00aa"]
+COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#8b5cf6", "#06b6d4", "#f43f5e", "#14b8a6"]
 
 
 class PartyRoom:

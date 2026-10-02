@@ -24,7 +24,6 @@ if (isPartyHost || isPlayer) {
 
     appEl.innerHTML = `
       <div class="background-3d">
-        <div class="grid-plane"></div>
         <div class="glow-horizon"></div>
       </div>
       

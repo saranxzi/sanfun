@@ -292,7 +292,7 @@ export class PlayerController {
                         <div class="imposter-card-phone" id="card-box-toggle">
                             <div class="cat-pill">CATEGORY: ${s.category}</div>
                             ${s.is_imposter ? `
-                                <h2 style="color: #ff0055; margin-bottom: 0.6rem;">YOU ARE THE IMPOSTER! 🦎</h2>
+                                <h2 style="color: var(--red); margin-bottom: 0.6rem;">YOU ARE THE IMPOSTER! 🦎</h2>
                                 <p style="color: #aaa; font-size: 0.85rem; margin-bottom: 1.2rem;">You do not know the secret word. Blend in, listen carefully, and bluff!</p>
                                 
                                 <!-- Imposter-only Hint Feature -->
@@ -507,9 +507,9 @@ export class PlayerController {
 
         if (!isAlive) {
             return `
-                <div class="panel-glass" style="padding: 2rem; text-align: center; border-color: #ff0055;">
+                <div class="panel-glass" style="padding: 2rem; text-align: center; border-color: var(--red);">
                     <div style="font-size: 3rem; margin-bottom: 0.5rem;">💀</div>
-                    <h2 style="color: #ff0055;">YOU ARE OUT!</h2>
+                    <h2 style="color: var(--red);">YOU ARE OUT!</h2>
                     <p style="color: #aaa; font-size: 0.85rem; margin-top: 0.5rem;">You ran out of lives. Cheer for the survivors on TV!</p>
                 </div>
             `;
@@ -520,14 +520,14 @@ export class PlayerController {
                 return `
                     <div class="wordbomb-active-turn" style="text-align: center;">
                         <div style="font-size: 2.5rem; animation: pulse 0.8s infinite alternate;">💣</div>
-                        <h2 style="color: #ff0055; margin: 0.3rem 0;">YOUR TURN! DEFUSE IT!</h2>
-                        <div class="letters-prompt-card" style="background: rgba(255, 0, 85, 0.12); border: 1px solid #ff0055; border-radius: 12px; padding: 1rem; margin: 1rem 0;">
+                        <h2 style="color: var(--red); margin: 0.3rem 0;">YOUR TURN! DEFUSE IT!</h2>
+                        <div class="letters-prompt-card" style="background: var(--red-subtle); border: 1px solid var(--red); border-radius: 12px; padding: 1rem; margin: 1rem 0;">
                             <div style="font-size: 0.8rem; color: #aaa; letter-spacing: 0.05em;">MUST CONTAIN:</div>
                             <div style="font-size: 2.2rem; font-weight: 900; color: #fff; letter-spacing: 0.15em;">${currentPrompt}</div>
                         </div>
                         <div class="word-submit-box" style="display: flex; flex-direction: column; gap: 0.8rem;">
                             <input type="text" id="wordbomb-input" class="input-nick" placeholder="Type a word..." autocomplete="off" autofocus style="text-transform: uppercase; font-size: 1.2rem; text-align: center; font-weight: bold; width: 100%;" />
-                            <button id="btn-submit-wordbomb" class="btn-primary-mobile" style="background: linear-gradient(135deg, #ff0055, #ff5500); border-color: #ff5500;">PASS BOMB ➔</button>
+                            <button id="btn-submit-wordbomb" class="btn-primary-mobile" style="background: linear-gradient(135deg, #f43f5e, #fb923c); border-color: #fb923c;">PASS BOMB ➔</button>
                         </div>
                         <div class="lives-indicator" style="margin-top: 1rem; font-size: 0.9rem; color: #aaa;">
                             Lives: <span style="letter-spacing: 2px;">${"❤️".repeat(lives)}</span>
@@ -668,7 +668,7 @@ export class PlayerController {
                 ctx.lineCap = "round";
                 ctx.lineJoin = "round";
                 ctx.lineWidth = 4;
-                ctx.strokeStyle = "#00f0ff";
+                ctx.strokeStyle = "#1e293b";
 
                 const getPt = (e: PointerEvent) => {
                     const rect = canvas.getBoundingClientRect();

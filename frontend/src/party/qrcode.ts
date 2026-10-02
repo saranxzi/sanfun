@@ -6,8 +6,8 @@ export async function generateQrSvg(text: string): Promise<string> {
             type: 'svg',
             margin: 1,
             color: {
-                dark: '#00f0ff',
-                light: '#0a0a16',
+                dark: '#0f172a',
+                light: '#ffffff',
             }
         });
     } catch (e) {
