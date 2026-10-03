@@ -19,6 +19,7 @@ COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#8b5cf6", "#06b6d4", "#f4
 class PartyRoom:
     def __init__(self, code: str):
         self.code: str = code
+        self.host_token: str = uuid.uuid4().hex
         self.host_socket: Optional[WebSocket] = None
         self.players: Dict[str, PlayerInfo] = {}  # player_id -> PlayerInfo
         self.player_sockets: Dict[str, WebSocket] = {}  # player_id -> WebSocket
@@ -29,7 +30,10 @@ class PartyRoom:
         self.state: str = "LOBBY"  # LOBBY | IN_GAME
         self.recent_imposters: List[str] = []
         self.created_at: float = time.time()
-        self.last_activity: float = time.time()
+        self.last_active_at: float = time.monotonic()
+
+    def touch(self):
+        self.last_active_at = time.monotonic()
 
     def get_public_players(self) -> List[Dict[str, Any]]:
         return [p.model_dump() for p in self.players.values()]
@@ -46,19 +50,21 @@ class PartyRoom:
             "network_info": get_network_info(),
         }
 
-    async def send_json_safe(self, ws: Optional[WebSocket], msg_type: ServerMessageType, payload: Dict[str, Any]):
+    async def send_json_safe(self, ws: Optional[WebSocket], msg_type: ServerMessageType, payload: Dict[str, Any], timeout: float = 1.5):
         if ws is None:
             return
         try:
-            await ws.send_json({"type": msg_type.value, "payload": payload})
+            await asyncio.wait_for(ws.send_json({"type": msg_type.value, "payload": payload}), timeout=timeout)
         except Exception:
             pass
 
     async def broadcast_all(self, msg_type: ServerMessageType, payload: Dict[str, Any]):
+        targets: List[WebSocket] = []
         if self.host_socket:
-            await self.send_json_safe(self.host_socket, msg_type, payload)
-        for ws in list(self.player_sockets.values()):
-            await self.send_json_safe(ws, msg_type, payload)
+            targets.append(self.host_socket)
+        targets.extend(self.player_sockets.values())
+        if targets:
+            await asyncio.gather(*(self.send_json_safe(ws, msg_type, payload) for ws in targets), return_exceptions=True)
 
     async def broadcast_room_state(self):
         """Broadcasts lobby overview to Host and all connected players."""
@@ -69,12 +75,13 @@ class PartyRoom:
         if not self.game_instance:
             return
 
+        tasks = []
         # 1. Host Screen
         if self.host_socket:
             host_state = self.game_instance.get_host_state()
             host_state["room_code"] = self.code
             host_state["state"] = self.state
-            await self.send_json_safe(self.host_socket, ServerMessageType.ROOM_STATE, host_state)
+            tasks.append(self.send_json_safe(self.host_socket, ServerMessageType.ROOM_STATE, host_state))
 
         # 2. Each Player (Strict role masking!)
         for pid, ws in list(self.player_sockets.items()):
@@ -87,7 +94,10 @@ class PartyRoom:
                 player_state["nickname"] = p_info.nickname
                 player_state["avatar"] = p_info.avatar
                 player_state["color"] = p_info.color
-                await self.send_json_safe(ws, ServerMessageType.PLAYER_STATE, player_state)
+                tasks.append(self.send_json_safe(ws, ServerMessageType.PLAYER_STATE, player_state))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def broadcast_timer_tick(self, phase_timer: float):
         await self.broadcast_all(ServerMessageType.TIMER_TICK, {"phase_timer": phase_timer})
@@ -215,20 +225,39 @@ class PartyRoomManager:
     def remove_room(self, code: str):
         self.rooms.pop(code.upper().strip(), None)
 
+    async def _tick_room(self, room: PartyRoom, dt: float, tick_count: int):
+        if room.state == "IN_GAME" and room.game_instance:
+            trans = room.game_instance.tick(dt)
+            if trans:
+                await room.broadcast_game_state()
+                await room.broadcast_event("PHASE_CHANGE", {"new_phase": trans})
+            elif tick_count % 2 == 0:
+                await room.broadcast_timer_tick(round(room.game_instance.phase_timer, 1))
+
     async def run_tick_loop(self):
+        last_time = time.monotonic()
         tick_count = 0
         while True:
             await asyncio.sleep(0.5)
+            now = time.monotonic()
+            dt = min(now - last_time, 2.0)
+            last_time = now
             tick_count += 1
-            for room in list(self.rooms.values()):
-                if room.state == "IN_GAME" and room.game_instance:
-                    trans = room.game_instance.tick(0.5)
-                    if trans:
-                        await room.broadcast_game_state()
-                        await room.broadcast_event("PHASE_CHANGE", {"new_phase": trans})
-                    elif tick_count % 2 == 0:
-                        # Sync timer every 1 second
-                        await room.broadcast_timer_tick(round(room.game_instance.phase_timer, 1))
+
+            # Prune abandoned rooms every 60 ticks (~30s)
+            if tick_count % 60 == 0:
+                for code, room in list(self.rooms.items()):
+                    inactive = now - room.last_active_at
+                    has_sockets = (room.host_socket is not None) or bool(room.player_sockets)
+                    if inactive > 3600 or (not has_sockets and inactive > 900):
+                        self.rooms.pop(code, None)
+
+            if self.rooms:
+                await asyncio.gather(
+                    *(self._tick_room(room, dt, tick_count) for room in list(self.rooms.values())),
+                    return_exceptions=True
+                )
+
 
 
 room_manager = PartyRoomManager()

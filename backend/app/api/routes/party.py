@@ -14,6 +14,7 @@ router = APIRouter()
 
 class CreateRoomResponse(BaseModel):
     room_code: str
+    host_token: str
     network_info: Dict[str, Any]
     available_games: list
 
@@ -47,6 +48,7 @@ async def create_party_room():
     room = room_manager.create_room()
     return CreateRoomResponse(
         room_code=room.code,
+        host_token=room.host_token,
         network_info=get_network_info(),
         available_games=get_available_games()
     )
@@ -71,6 +73,7 @@ async def party_websocket(
     websocket: WebSocket,
     code: str,
     role: str = Query("player"),
+    host_token: Optional[str] = Query(None),
     session_token: Optional[str] = Query(None),
     nickname: Optional[str] = Query(None),
     avatar: Optional[str] = Query(None),
@@ -86,11 +89,17 @@ async def party_websocket(
     player_id: Optional[str] = None
 
     if role == "host":
+        if not host_token or host_token != room.host_token:
+            await websocket.send_json({"type": "ERROR", "payload": {"message": "Unauthorized host token."}})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
         room.host_socket = websocket
+        room.touch()
         # Send initial room state
         await room.broadcast_room_state()
 
     else:  # role == "player"
+        room.touch()
         # Check if reconnecting via session token
         player = None
         if session_token:
@@ -103,6 +112,7 @@ async def party_websocket(
 
         player_id = player.id
         room.player_sockets[player_id] = websocket
+
 
         # Send welcome payload with assigned session token & player info
         await websocket.send_json({
@@ -126,6 +136,7 @@ async def party_websocket(
     try:
         while True:
             data = await websocket.receive_json()
+            room.touch()
             msg_type = data.get("type")
 
             if msg_type == ClientMessageType.PING.value:
@@ -133,6 +144,9 @@ async def party_websocket(
                 continue
 
             if role == "host":
+                if websocket != room.host_socket:
+                    continue
+
                 if msg_type == ClientMessageType.SELECT_GAME.value:
                     game_id = data.get("game_id")
                     if game_id:
@@ -170,6 +184,7 @@ async def party_websocket(
                             await room.broadcast_event(res["event"], res)
 
     except WebSocketDisconnect:
+        room.touch()
         if role == "host":
             room.host_socket = None
         elif role == "player" and player_id:
@@ -178,8 +193,10 @@ async def party_websocket(
                 await room.broadcast_room_state()
             elif room.state == "IN_GAME":
                 await room.broadcast_game_state()
-    except Exception as e:
+    except Exception:
+        room.touch()
         if role == "host":
             room.host_socket = None
         elif role == "player" and player_id:
             room.disconnect_player(player_id)
+

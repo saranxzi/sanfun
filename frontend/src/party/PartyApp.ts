@@ -37,8 +37,9 @@ export class PartyApp {
             const res = await fetch(`${apiBase}/api/party/create`, { method: "POST" });
             const data = await res.json();
             const roomCode = data.room_code;
+            const hostToken = data.host_token;
 
-            this.socket = new PartySocket(roomCode, "host");
+            this.socket = new PartySocket(roomCode, "host", hostToken);
             this.hostLobbyView = new HostLobbyView(this.container, this.socket);
             this.hostGameView = new HostGameView(this.container, this.socket);
 

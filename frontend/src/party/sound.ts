@@ -3,13 +3,23 @@ class SoundManager {
     private ctx: AudioContext | null = null;
     private muted: boolean = false;
 
+    constructor() {
+        const unlock = () => {
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume().catch(() => {});
+            }
+        };
+        window.addEventListener('click', unlock, { once: true, passive: true });
+        window.addEventListener('touchstart', unlock, { once: true, passive: true });
+    }
+
     private getContext(): AudioContext {
         if (!this.ctx) {
             const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
             this.ctx = new AudioCtx();
         }
         if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
+            this.ctx.resume().catch(() => {});
         }
         return this.ctx;
     }
@@ -27,20 +37,26 @@ class SoundManager {
         if (this.muted) return;
         try {
             const ctx = this.getContext();
+            const now = ctx.currentTime;
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
 
             osc.type = type;
-            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            osc.frequency.setValueAtTime(Math.max(20, freq), now);
 
-            gain.gain.setValueAtTime(startGain, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(endGain, ctx.currentTime + duration);
+            gain.gain.setValueAtTime(Math.max(0.0001, startGain), now);
+            gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, endGain), now + duration);
 
             osc.connect(gain);
             gain.connect(ctx.destination);
 
-            osc.start();
-            osc.stop(ctx.currentTime + duration);
+            osc.onended = () => {
+                osc.disconnect();
+                gain.disconnect();
+            };
+
+            osc.start(now);
+            osc.stop(now + duration);
         } catch (e) {
             console.warn('Audio playback error', e);
         }

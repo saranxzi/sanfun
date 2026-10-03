@@ -13,13 +13,14 @@ if (isPartyHost || isPlayer) {
 } else {
     // Dedicated Sanfun Party Lounge Portal
     const partyGames = [
-        { id: "mafia", icon: "🕵️", title: "MAFIA", tagline: "Trust No One. Deceive Everyone.", players: "4-16 Players" },
-        { id: "imposter", icon: "🦎", title: "FIND THE IMPOSTER", tagline: "Blend In. Guess the Secret Word.", players: "3-16 Players" },
-        { id: "witclash", icon: "💥", title: "WITCLASH", tagline: "Hilarious Head-to-Head Joke Showdowns.", players: "3-16 Players" },
-        { id: "trivia", icon: "⚡", title: "TRIVIA BLITZ", tagline: "Lightning Trivia & Streak Multipliers.", players: "1-16 Players" },
-        { id: "doodledash", icon: "🎨", title: "DOODLEDASH", tagline: "Real-Time Drawing & Speed Guessing.", players: "2-16 Players" },
-        { id: "mostlikely", icon: "👑", title: "MOST LIKELY TO", tagline: "Vote, Roast & Crown Your Friends.", players: "3-16 Players" },
-        { id: "wordbomb", icon: "💣", title: "WORD BOMB", tagline: "Ticking Bomb Hot Potato Word Race.", players: "2-16 Players" },
+        { id: "mafia", icon: "🐺", title: "MAFIA", tagline: "Trust No One. Deceive Everyone.", players: "4-16 Players" },
+        { id: "imposter", icon: "🕵️", title: "FIND THE IMPOSTER", tagline: "Blend In. Guess the Secret Word.", players: "3-16 Players" },
+        { id: "dialed", icon: "🎯", title: "DIALED", tagline: "Color Hue & Audio Pitch Precision Recall.", players: "2-16 Players" },
+        { id: "fermi", icon: "🪐", title: "FERMI ESTIMATOR", tagline: "Cosmic Scale Order-of-Magnitude Puzzles.", players: "2-16 Players" },
+        { id: "auction", icon: "🏛️", title: "THE AUCTION HOUSE", tagline: "Secret Bidding on Rare Art & Oddities.", players: "2-16 Players" },
+        { id: "circle", icon: "⭕", title: "DRAW A PERFECT CIRCLE", tagline: "Freehand Circle Mathematical Perfection.", players: "2-16 Players" },
+        { id: "trolley", icon: "🚋", title: "ABSURD DILEMMAS", tagline: "Ethical Paradoxes & Consensus Betting.", players: "2-16 Players" },
+        { id: "trends", icon: "📈", title: "HIGHER OR LOWER", tagline: "Global Search Volume Showdowns & Streaks.", players: "2-16 Players" },
     ];
 
     appEl.innerHTML = `
@@ -64,7 +65,7 @@ if (isPartyHost || isPlayer) {
 
           <!-- Featured Games Showcase -->
           <div class="collection-divider">
-            <span>7 COUCH CO-OP PARTY GAMES INCLUDED</span>
+            <span>8 COUCH CO-OP PARTY GAMES INCLUDED</span>
           </div>
 
           <div class="portal-games-grid">

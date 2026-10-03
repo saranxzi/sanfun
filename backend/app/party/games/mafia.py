@@ -101,11 +101,12 @@ class MafiaGame(BasePartyGame):
         self.history_log.append(f"Night {self.round_number} falls upon the village.")
 
     def check_night_complete(self) -> bool:
-        alive_mafia = [pid for pid in self.alive_players if self.roles[pid] == self.ROLE_MAFIA]
-        alive_doctor = [pid for pid in self.alive_players if self.roles[pid] == self.ROLE_DOCTOR]
-        alive_detective = [pid for pid in self.alive_players if self.roles[pid] == self.ROLE_DETECTIVE]
+        alive_conn = {pid for pid in self.alive_players if self.players.get(pid) and self.players[pid].is_connected}
+        alive_mafia = [pid for pid in alive_conn if self.roles.get(pid) == self.ROLE_MAFIA]
+        alive_doctor = [pid for pid in alive_conn if self.roles.get(pid) == self.ROLE_DOCTOR]
+        alive_detective = [pid for pid in alive_conn if self.roles.get(pid) == self.ROLE_DETECTIVE]
 
-        mafia_done = len(self.mafia_votes) == len(alive_mafia)
+        mafia_done = len(self.mafia_votes) >= len(alive_mafia)
         doctor_done = (len(alive_doctor) == 0) or (self.doctor_target is not None)
         detective_done = (len(alive_detective) == 0) or (self.detective_target is not None)
 
@@ -148,10 +149,12 @@ class MafiaGame(BasePartyGame):
 
         eliminated_id = None
         if tally:
-            top_target, top_votes = max(tally.items(), key=lambda item: item[1])
-            # Strict majority of alive players voting
-            if top_votes > len(self.alive_players) // 2:
-                eliminated_id = top_target
+            sorted_tally = sorted(tally.items(), key=lambda item: item[1], reverse=True)
+            # Strict plurality: top candidate must have strictly more votes than second place
+            if len(sorted_tally) > 1 and sorted_tally[0][1] == sorted_tally[1][1]:
+                eliminated_id = None
+            elif sorted_tally[0][1] > len(self.alive_players) // 2:
+                eliminated_id = sorted_tally[0][0]
 
         if eliminated_id:
             self.alive_players.discard(eliminated_id)
@@ -230,7 +233,8 @@ class MafiaGame(BasePartyGame):
             target_id = data.get("target_id")
             if target_id == "SKIP" or (target_id in self.alive_players and target_id != player_id):
                 self.day_votes[player_id] = target_id
-                if len(self.day_votes) == len(self.alive_players):
+                alive_connected = [pid for pid in self.alive_players if self.players.get(pid) and self.players[pid].is_connected]
+                if len(self.day_votes) >= len(alive_connected):
                     self.resolve_day_vote()
                 return {"broadcast": True}
 

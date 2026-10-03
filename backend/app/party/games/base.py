@@ -15,7 +15,8 @@ class BasePartyGame(ABC):
 
     def __init__(self, room_code: str, players: Dict[str, PlayerInfo], **kwargs):
         self.room_code = room_code
-        self.players = {pid: p.model_copy() for pid, p in players.items()}
+        self.players = players
+        self.round_data: Dict[str, Any] = {}
         self.phase: str = "INIT"
         self.phase_timer: float = 0.0
         self.round_number: int = 1

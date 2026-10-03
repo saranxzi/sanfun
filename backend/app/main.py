@@ -9,10 +9,22 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from pathlib import Path
+from fastapi import HTTPException
 from app.api.routes import party
 from app.party.manager import room_manager
 
-limiter = Limiter(key_func=get_remote_address, storage_uri="memory://", default_limits=["200/minute"])
+
+def get_real_client_ip(request: Request) -> str:
+    client_host = request.client.host if request.client else "127.0.0.1"
+    if client_host == "127.0.0.1":
+        cf_ip = request.headers.get("CF-Connecting-IP")
+        if cf_ip:
+            return cf_ip
+    return client_host
+
+
+limiter = Limiter(key_func=get_real_client_ip, storage_uri="memory://", default_limits=["200/minute"])
 
 
 @asynccontextmanager
@@ -52,22 +64,25 @@ async def health_check(request: Request):
 
 
 # Serve static frontend dist if built
-dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
+dist_path = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist")))
 
-if os.path.isdir(dist_path):
-    assets_dir = os.path.join(dist_path, "assets")
-    if os.path.isdir(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+if dist_path.is_dir():
+    assets_dir = dist_path / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
     @app.get("/")
     async def serve_root():
-        return FileResponse(os.path.join(dist_path, "index.html"))
+        return FileResponse(dist_path / "index.html")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        file_path = os.path.join(dist_path, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(dist_path, "index.html"))
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        candidate = (dist_path / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(dist_path):
+            return FileResponse(candidate)
+        return FileResponse(dist_path / "index.html")
+
 
 

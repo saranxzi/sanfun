@@ -480,7 +480,8 @@ class ImposterGame(BasePartyGame):
             target_id = data.get("target_id")
             if target_id and target_id in self.players and target_id != player_id:
                 self.votes[player_id] = target_id
-                if len(self.votes) == len(self.players):
+                connected_count = len([p for p in self.players.values() if p.is_connected])
+                if len(self.votes) >= connected_count:
                     self.resolve_voting()
                 return {"broadcast": True}
 
@@ -491,6 +492,15 @@ class ImposterGame(BasePartyGame):
                 return {"broadcast": True}
 
         return {"status": "ignored"}
+
+    def on_player_disconnect(self, player_id: str) -> None:
+        super().on_player_disconnect(player_id)
+        if player_id in self.imposter_ids and not self.is_over and self.phase not in ("INIT", "GAME_OVER"):
+            connected_imposters = [imp for imp in self.imposter_ids if self.players.get(imp) and self.players[imp].is_connected]
+            if not connected_imposters:
+                self.phase = "GAME_OVER"
+                self.is_over = True
+                self.winner = "CREW"
 
     def get_host_state(self) -> Dict[str, Any]:
         """Big Screen TV view. Does NOT leak secret word or imposter identity until GAME_OVER!"""

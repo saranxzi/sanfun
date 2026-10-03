@@ -5,6 +5,7 @@ export class PartySocket {
     public roomCode: string;
     public role: "host" | "player";
     public sessionToken: string | null = null;
+    public hostToken: string | null = null;
     public nickname: string = "";
     public avatar: string = "🦊";
     public color: string = "#00f0ff";
@@ -17,9 +18,10 @@ export class PartySocket {
     public onOpen?: () => void;
     public onClose?: () => void;
 
-    constructor(roomCode: string, role: "host" | "player" = "player") {
+    constructor(roomCode: string, role: "host" | "player" = "player", hostToken: string | null = null) {
         this.roomCode = roomCode.toUpperCase().trim();
         this.role = role;
+        this.hostToken = hostToken;
         this.sessionToken = localStorage.getItem(`sanfun_token_${this.roomCode}`);
     }
 
@@ -31,6 +33,7 @@ export class PartySocket {
         const query = new URLSearchParams({
             role: this.role
         });
+        if (this.hostToken) query.set("host_token", this.hostToken);
         if (this.sessionToken) query.set("session_token", this.sessionToken);
         if (this.nickname) query.set("nickname", this.nickname);
         if (this.avatar) query.set("avatar", this.avatar);

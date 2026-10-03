@@ -1,5 +1,6 @@
 import type { PlayerGameState, LobbyState } from "../types";
 import { PartySocket } from "../PartySocket";
+import { soundManager } from "../sound";
 
 export class PlayerController {
     private container: HTMLElement;
@@ -8,10 +9,21 @@ export class PlayerController {
     private currentTimer: number = 0;
     private maxTimerDuration: number = 15;
     private timerInterval: number | null = null;
-    private isDrawing: boolean = false;
-    private lastDrawPt: { x: number; y: number } | null = null;
-    private cardHidden: boolean = false;
-    private hintRevealed: boolean = false;
+
+    // Render caching to prevent iOS keyboard dismissal
+    private renderedGameId: string | null = null;
+    private renderedPhase: string | null = null;
+    private renderedRound: number | null = null;
+    private renderedState: string | null = null;
+
+    // Circle game drawing cache
+    private circlePoints: Array<[number, number]> = [];
+    private isDrawingCircle: boolean = false;
+
+    // Local Dialed state
+    private dialHue: number = 180;
+    private dialSat: number = 90;
+    private dialPitch: number = 440;
 
     constructor(container: HTMLElement, socket: PartySocket) {
         this.container = container;
@@ -51,40 +63,33 @@ export class PlayerController {
             this.currentTimer = merged.phase_timer;
         }
 
-        if (newPhase === "WORD_REVEAL" && prevPhase !== "WORD_REVEAL") {
-            this.cardHidden = false;
-            this.hintRevealed = false;
-        }
-
         this.state = merged;
 
-        // Preserve form inputs and active focus across renders
-        const activeEl = document.activeElement as HTMLInputElement;
-        const activeId = (activeEl && activeEl.id) ? activeEl.id : null;
-        const selStart = activeEl?.selectionStart;
-        const selEnd = activeEl?.selectionEnd;
+        // Check if full DOM rebuild is necessary
+        const needsFullRebuild = (
+            merged.state !== this.renderedState ||
+            merged.game_id !== this.renderedGameId ||
+            merged.phase !== this.renderedPhase ||
+            merged.round_number !== this.renderedRound
+        );
 
-        const savedInputs: Record<string, string> = {};
-        this.container.querySelectorAll("input").forEach(input => {
-            if (input.id) savedInputs[input.id] = input.value;
-        });
-
-        this.render();
-
-        Object.entries(savedInputs).forEach(([id, val]) => {
-            const input = this.container.querySelector(`#${id}`) as HTMLInputElement;
-            if (input && !input.value) input.value = val;
-        });
-
-        if (activeId) {
-            const el = this.container.querySelector(`#${activeId}`) as HTMLInputElement;
-            if (el) {
-                el.focus();
-                if (selStart !== null && selStart !== undefined && selEnd !== null && selEnd !== undefined) {
-                    try { el.setSelectionRange(selStart, selEnd); } catch {}
-                }
-            }
+        if (needsFullRebuild) {
+            this.renderedState = merged.state;
+            this.renderedGameId = merged.game_id || null;
+            this.renderedPhase = merged.phase || null;
+            this.renderedRound = merged.round_number || null;
+            this.render();
+        } else {
+            // Targeted in-place update: Preserves iOS virtual keyboard!
+            this.patchDynamicNodes();
         }
+    }
+
+    private patchDynamicNodes() {
+        if (!this.state) return;
+        const scoreBadge = this.container.querySelector(".score-badge");
+        if (scoreBadge) scoreBadge.textContent = `${this.state.score || 0} pts`;
+        this.updateTimerDisplay();
     }
 
     public updateTimerTick(phaseTimer: number) {
@@ -141,52 +146,39 @@ export class PlayerController {
                     </div>
                     <div class="form-group">
                         <label>NICKNAME</label>
-                        <input type="text" id="join-nick" maxlength="16" placeholder="Your Name" value="${savedNick}" class="input-nick" />
+                        <input type="text" id="join-nickname" maxlength="12" placeholder="Your name" value="${savedNick}" class="input-nick" />
                     </div>
-                    <button id="btn-player-join" class="btn-primary-mobile">ENTER PARTY</button>
+                    <button id="btn-join-room" class="btn-primary-action">ENTER LOBBY</button>
                 </div>
             </div>
         `;
 
-        this.container.querySelector("#btn-player-join")?.addEventListener("click", () => {
-            const code = (this.container.querySelector("#join-code") as HTMLInputElement).value.trim().toUpperCase();
-            const nick = (this.container.querySelector("#join-nick") as HTMLInputElement).value.trim();
-            if (code.length === 4 && nick) {
-                localStorage.setItem("sanfun_player_nick", nick);
-                this.socket.roomCode = code;
-                this.socket.nickname = nick;
-                this.socket.connect();
-            } else {
-                alert("Please enter a 4-letter room code and your nickname.");
-            }
+        this.container.querySelector("#btn-join-room")?.addEventListener("click", () => {
+            const codeInput = (this.container.querySelector("#join-code") as HTMLInputElement).value.trim().toUpperCase();
+            const nickInput = (this.container.querySelector("#join-nickname") as HTMLInputElement).value.trim();
+            if (!codeInput || codeInput.length !== 4) return alert("Enter a valid 4-character Room Code!");
+            if (!nickInput) return alert("Enter a nickname!");
+
+            localStorage.setItem("sanfun_player_nick", nickInput);
+            this.socket.roomCode = codeInput;
+            this.socket.nickname = nickInput;
+            this.socket.connect();
         });
     }
 
     private renderLobbyWaiting() {
+        const s = this.state!;
         this.container.innerHTML = `
-            <div class="player-waiting-screen">
+            <div class="player-lobby-waiting">
                 <div class="controller-card">
-                    <div class="player-profile-mini" style="justify-content: center; margin-bottom: 1rem;">
-                        <span class="av">${this.state!.avatar || "🎮"}</span>
-                        <span class="nick">${this.state!.nickname || "Player"}</span>
+                    <div class="avatar-large">${s.avatar || "🦊"}</div>
+                    <h2>${s.nickname || "Player"}</h2>
+                    <div class="room-chip">ROOM: ${s.room_code}</div>
+                    <div class="waiting-indicator">
+                        <div class="dot-flashing"></div>
+                        <span>Waiting for host to select game and start...</span>
                     </div>
-                    <h3>YOU'RE IN! 🎉</h3>
-                    <p style="margin: 0.8rem 0; color: #aaa;">Room: <strong style="color: var(--primary);">${this.state!.room_code}</strong></p>
-                    <p style="font-size: 0.85rem; color: #777;">Look at the Big Screen! The host will choose a game to start.</p>
                 </div>
-            </div>
-        `;
-    }
-
-    private renderCandidateList(candidates: any[] | undefined, selectedId: any, action: string): string {
-        if (!candidates || candidates.length === 0) return "";
-        return `
-            <div class="candidates-list">
-                ${candidates.map((c: any) => `
-                    <button class="btn-target ${selectedId === c.id ? "selected" : ""}" data-action="${action}" data-target="${c.id}">
-                        ${c.avatar} ${c.nickname}
-                    </button>
-                `).join("")}
             </div>
         `;
     }
@@ -194,15 +186,15 @@ export class PlayerController {
     private renderGameController() {
         const s = this.state!;
         let html = "";
-
         switch (s.game_id) {
             case "mafia": html = this.renderMafiaController(); break;
             case "imposter": html = this.renderImposterController(); break;
-            case "witclash": html = this.renderWitClashController(); break;
-            case "trivia": html = this.renderTriviaController(); break;
-            case "doodledash": html = this.renderDoodleController(); break;
-            case "mostlikely": html = this.renderMostLikelyController(); break;
-            case "wordbomb": html = this.renderWordBombController(); break;
+            case "dialed": html = this.renderDialedController(); break;
+            case "fermi": html = this.renderFermiController(); break;
+            case "auction": html = this.renderAuctionController(); break;
+            case "circle": html = this.renderCircleController(); break;
+            case "trolley": html = this.renderTrolleyController(); break;
+            case "trends": html = this.renderTrendsController(); break;
             default: html = `<div>Game controller for ${s.game_id}</div>`;
         }
 
@@ -228,23 +220,17 @@ export class PlayerController {
         this.bindControllerActions();
     }
 
+    // 1. MAFIA
     private renderMafiaController(): string {
         const s = this.state!;
         if (!s.is_alive) return `<div class="dead-screen">👻 Eliminated! Watch the trial on TV.</div>`;
 
         if (s.phase === "ROLE_REVEAL") {
-            const hints: Record<string, string> = {
-                MAFIA: "Eliminate villagers in secret without being discovered.",
-                DOCTOR: "Choose 1 person each night to protect from death.",
-                DETECTIVE: "Investigate 1 person each night to learn their role.",
-                VILLAGER: "Find and vote out the Mafia during daytime town debates."
-            };
             return `
                 <div class="role-reveal-phone">
                     <h3>SECRET ROLE</h3>
-                    <div class="role-card-box" style="border-color: var(--primary);">
+                    <div class="role-card-box">
                         <div class="role-name">${s.my_role || "VILLAGER"}</div>
-                        <p class="role-hint">${hints[s.my_role || "VILLAGER"] || hints.VILLAGER}</p>
                     </div>
                 </div>
             `;
@@ -254,469 +240,462 @@ export class PlayerController {
             } else if (s.night_action === "DOCTOR_HEAL") {
                 return `<h3>💉 HEAL SOMEONE</h3>${this.renderCandidateList(s.candidates, s.my_heal, "DOCTOR_HEAL")}`;
             } else if (s.night_action === "DETECTIVE_INVESTIGATE") {
-                const res = s.detective_result ? `<div class="panel-glass" style="padding: 0.6rem; margin-bottom: 0.8rem; color: var(--accent);"><strong>${s.detective_result.target_name}</strong>: ${s.detective_result.alignment}</div>` : "";
-                return `<h3>🔍 INVESTIGATE</h3>${res}${this.renderCandidateList(s.candidates, null, "DETECTIVE_INVESTIGATE")}`;
+                return `<h3>🔍 INVESTIGATE</h3>${this.renderCandidateList(s.candidates, null, "DETECTIVE_INVESTIGATE")}`;
             }
-            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><h3>😴 SLEEPING</h3><p style="color: #888;">Rest up for tomorrow's debate.</p></div>`;
+            return `<div class="panel-glass"><h3>😴 SLEEPING</h3><p style="color: #888;">Rest up for tomorrow's debate.</p></div>`;
         } else if (s.phase === "DAY_VOTE") {
-            return `
-                <h3>⚖️ CAST VOTE</h3>
-                ${this.renderCandidateList(s.candidates, s.my_vote, "CAST_VOTE")}
-                <button class="btn-skip" data-action="CAST_VOTE" data-target="SKIP">SKIP VOTE</button>
-            `;
+            return `<h3>⚖️ VOTE SUSPECT</h3>${this.renderCandidateList(s.candidates, s.my_vote, "CAST_VOTE")}`;
         }
-        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
+        return `<div class="panel-glass"><h3>👀 WATCH TV</h3><p style="color: #888;">Phase: ${s.phase}</p></div>`;
     }
 
+    private renderCandidateList(candidates: any[] = [], myVote: string | null = null, actionName: string = "CAST_VOTE"): string {
+        return `
+            <div class="candidate-list">
+                ${candidates.map((c: any) => `
+                    <button class="btn-candidate ${myVote === c.id ? 'selected' : ''}" data-action="${actionName}" data-target-id="${c.id}">
+                        <span class="cand-av">${c.avatar}</span>
+                        <span class="cand-name">${c.nickname}</span>
+                    </button>
+                `).join("")}
+                ${actionName === "CAST_VOTE" ? `
+                    <button class="btn-candidate btn-skip ${myVote === 'SKIP' ? 'selected' : ''}" data-action="CAST_VOTE" data-target-id="SKIP">
+                        ⏭️ SKIP VOTE
+                    </button>
+                ` : ""}
+            </div>
+        `;
+    }
+
+    // 2. IMPOSTER
     private renderImposterController(): string {
         const s = this.state!;
-        if (s.phase === "WORD_REVEAL" || s.phase === "CLUE_ROUNDS") {
+        if (s.phase === "WORD_REVEAL") {
             return `
-                <div class="imposter-wrapper-phone">
-                    <div class="card-privacy-bar">
-                        <button id="btn-toggle-card" class="btn-card-toggle">
-                            ${this.cardHidden ? "👁️ REVEAL CARD" : "🙈 HIDE CARD"}
-                        </button>
-                    </div>
-
-                    ${this.cardHidden ? `
-                        <div class="imposter-card-phone card-hidden-state" id="card-box-toggle">
-                            <div class="cat-pill">CATEGORY: ${s.category}</div>
-                            <div class="card-hidden-overlay">
-                                <div class="lock-icon">🔒</div>
-                                <h3>CARD HIDDEN</h3>
-                                <p class="tap-note">Tap here to view your secret role</p>
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="imposter-card-phone" id="card-box-toggle">
-                            <div class="cat-pill">CATEGORY: ${s.category}</div>
-                            ${s.is_imposter ? `
-                                <h2 style="color: var(--red); margin-bottom: 0.6rem;">YOU ARE THE IMPOSTER! 🦎</h2>
-                                <p style="color: #aaa; font-size: 0.85rem; margin-bottom: 1.2rem;">You do not know the secret word. Blend in, listen carefully, and bluff!</p>
-                                
-                                <!-- Imposter-only Hint Feature -->
-                                <div class="imposter-hint-container">
-                                    <button id="btn-toggle-hint" class="btn-imposter-hint">
-                                        ${this.hintRevealed ? "💡 HIDE HINT" : "💡 REVEAL HINT"}
-                                    </button>
-                                    ${this.hintRevealed && s.imposter_hint ? `
-                                        <div class="imposter-hint-box">
-                                            <span class="hint-label">CONFIDENTIAL CLUE:</span>
-                                            <p class="hint-text">${s.imposter_hint}</p>
-                                        </div>
-                                    ` : ""}
-                                </div>
-                            ` : `
-                                <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.4rem;">SECRET WORD</div>
-                                <h2 style="color: var(--green); font-size: 2.2rem; margin-bottom: 0.8rem; letter-spacing: 1px;">${s.secret_word}</h2>
-                                <p style="color: #888; font-size: 0.8rem;">Keep this word hidden from the imposter!</p>
-                            `}
-                        </div>
-                    `}
+                <div class="secret-word-card">
+                    <div class="brand-sub">YOUR SECRET ASSIGNMENT</div>
+                    <div class="word-display">${s.is_imposter ? "❓ YOU ARE THE IMPOSTER" : `🔑 ${s.secret_word}`}</div>
+                    ${s.is_imposter && s.imposter_hint ? `<div class="imposter-hint-box">💡 Hint: ${s.imposter_hint}</div>` : ""}
                 </div>
             `;
         } else if (s.phase === "VOTING") {
-            return `<h3>WHO IS THE IMPOSTER?</h3>${this.renderCandidateList(s.candidates, s.my_vote, "CAST_VOTE")}`;
-        } else if (s.phase === "IMPOSTER_GUESS") {
-            if (s.is_imposter) {
-                return `
-                    <div class="panel-glass" style="padding: 1.5rem;">
-                        <h3>CLUTCH GUESS</h3>
-                        <p class="guess-note">Guess the secret word to win!</p>
-                        <div class="guess-form">
-                            <input type="text" id="imp-guess-input" placeholder="Secret word..." autofocus />
-                            <button id="btn-submit-imp-guess">GUESS</button>
-                        </div>
-                    </div>
-                `;
-            }
-            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>The Imposter is guessing...</p></div>`;
-        } else if (s.phase === "GAME_OVER") {
+            return `<h3>🗳️ WHO IS THE IMPOSTER?</h3>${this.renderCandidateList(s.candidates, s.my_vote, "CAST_VOTE")}`;
+        } else if (s.phase === "IMPOSTER_GUESS" && s.is_imposter) {
             return `
-                <div class="panel-glass gameover-phone" style="padding: 2rem; text-align: center;">
-                    <h2>ROUND FINISHED! 🏆</h2>
-                    <div class="player-score-badge" style="margin: 1rem 0; font-size: 1.2rem; color: var(--primary);">
-                        Current Score: <strong>${s.score || 0} pts</strong>
-                    </div>
-                    <p style="color: #aaa; font-size: 0.85rem;">Look at the Big Screen for final results!</p>
-                    <p style="color: #666; font-size: 0.8rem; margin-top: 0.8rem;">Waiting for host to start the next round...</p>
+                <div class="guess-form">
+                    <h3>🎯 CLUTCH GUESS</h3>
+                    <p style="color: var(--text-dim); margin-bottom: 1rem;">Guess the secret word to win!</p>
+                    <input type="text" id="input-imposter-guess" placeholder="Enter secret word..." />
+                    <button id="btn-submit-imposter-guess" class="btn-primary-action" style="margin-top: 0.8rem;">SUBMIT GUESS</button>
                 </div>
             `;
         }
-        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
+        return `<div class="panel-glass"><h3>👀 DISCUSS</h3><p style="color: #888;">Follow the speaking order on TV!</p></div>`;
     }
 
-    private renderWitClashController(): string {
+    // 3. DIALED
+    private renderDialedController(): string {
         const s = this.state!;
-        if (s.phase === "PROMPT_INPUT") {
-            return `
-                <div class="witclash-phone">
-                    ${(s.my_prompts || []).map((p: any) => `
-                        <div class="prompt-input-card" style="padding: 1rem; margin-bottom: 1rem;">
-                            <p style="font-weight: bold; margin-bottom: 0.5rem; color: var(--accent);">"${p.text}"</p>
-                            ${p.answered ? `<span style="color: var(--green); font-size: 0.85rem;">✓ Answer Submitted</span>` : `
-                                <input type="text" maxlength="80" placeholder="Your punchline..." id="prompt-ans-${p.id}" style="width: 100%; padding: 0.6rem; margin-bottom: 0.6rem;" />
-                                <button class="btn-submit-punchline" data-prompt-id="${p.id}" style="width: 100%; padding: 0.6rem; background: var(--primary); color: #000; font-weight: bold;">SUBMIT</button>
-                            `}
-                        </div>
-                    `).join("")}
-                </div>
-            `;
-        } else if (s.phase === "SHOWDOWN_VOTE") {
-            if (s.can_vote) {
+        if (s.phase === "INSPECT") {
+            return `<div class="panel-glass"><h3>👀 WATCH THE TV SCREEN</h3><p style="color: #888;">Memorize the target ${s.round_type === 'COLOR' ? 'color' : 'tone'}!</p></div>`;
+        } else if (s.phase === "DIAL") {
+            if (s.has_locked) {
+                return `<div class="panel-glass"><h3>✓ LOCKED IN!</h3><p style="color: #888;">Waiting for other players...</p></div>`;
+            }
+
+            if (s.round_type === "COLOR") {
                 return `
-                    <div class="vote-phone-options">
-                        <h3 style="text-align: center;">VOTE FOR THE BEST!</h3>
-                        <button class="btn-vote-choice choice-1" data-choice="1">A: "${s.answer_1}"</button>
-                        <button class="btn-vote-choice choice-2" data-choice="2">B: "${s.answer_2}"</button>
+                    <div class="dial-controller">
+                        <h3>🎨 MATCH THE COLOR</h3>
+                        <div id="dial-swatch" style="background: hsl(${this.dialHue}, ${this.dialSat}%, 50%); width: 140px; height: 140px; border-radius: 20px; margin: 1rem auto; box-shadow: 0 8px 24px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.2);"></div>
+                        <div class="form-group">
+                            <label>HUE (${this.dialHue}°)</label>
+                            <input type="range" id="slider-hue" min="0" max="360" value="${this.dialHue}" style="width: 100%;" />
+                        </div>
+                        <div class="form-group">
+                            <label>SATURATION (${this.dialSat}%)</label>
+                            <input type="range" id="slider-sat" min="20" max="100" value="${this.dialSat}" style="width: 100%;" />
+                        </div>
+                        <button id="btn-lock-dial" class="btn-primary-action" style="margin-top: 1rem;">LOCK IN COLOR</button>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="dial-controller">
+                        <h3>🎵 MATCH THE PITCH</h3>
+                        <div class="tone-icon" style="font-size: 3rem; margin: 1rem 0;">📻</div>
+                        <div class="form-group">
+                            <label>FREQUENCY (${this.dialPitch} Hz)</label>
+                            <input type="range" id="slider-pitch" min="150" max="600" value="${this.dialPitch}" style="width: 100%;" />
+                        </div>
+                        <button id="btn-test-tone" class="btn-candidate" style="margin-bottom: 0.8rem;">🔊 PLAY MY TONE</button>
+                        <button id="btn-lock-dial" class="btn-primary-action">LOCK IN PITCH</button>
                     </div>
                 `;
             }
-            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Your matchup! Watch the votes roll in on TV.</p></div>`;
+        } else {
+            return `
+                <div class="panel-glass">
+                    <h3>ACCURACY REVEAL</h3>
+                    <div style="font-size: 1.8rem; font-weight: 700; color: var(--primary); margin: 0.8rem 0;">
+                        ${s.my_result ? `${s.my_result.score_pct}% Precision` : 'Watching TV'}
+                    </div>
+                    <p style="color: #888;">+${s.my_result?.points_awarded || 0} pts earned!</p>
+                </div>
+            `;
         }
-        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
 
-    private renderTriviaController(): string {
+    // 4. FERMI
+    private renderFermiController(): string {
         const s = this.state!;
         if (s.phase === "QUESTION") {
-            if (s.has_answered) {
-                const choiceSymbols = ["▲ Red", "◆ Blue", "● Yellow", "■ Green"];
-                const choiceText = s.selected_choice !== null && s.selected_choice !== undefined ? choiceSymbols[s.selected_choice] : "Registered";
-                return `
-                    <div class="locked-card panel-glass">
-                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔒</div>
-                        <h3>ANSWER LOCKED IN</h3>
-                        <div class="locked-choice">${choiceText}</div>
-                        <p class="locked-sub">Results will reveal on TV when the clock expires!</p>
-                    </div>
-                `;
+            if (s.has_locked) {
+                return `<div class="panel-glass"><h3>✓ ESTIMATE LOCKED</h3><p style="color: #888;">Submitted: ${s.my_guess?.toLocaleString()} ${s.unit}</p></div>`;
             }
             return `
-                <div class="trivia-mobile-buttons">
-                    <button class="btn-trivia-opt opt-0" data-choice="0">▲</button>
-                    <button class="btn-trivia-opt opt-1" data-choice="1">◆</button>
-                    <button class="btn-trivia-opt opt-2" data-choice="2">●</button>
-                    <button class="btn-trivia-opt opt-3" data-choice="3">■</button>
+                <div class="fermi-controller">
+                    <h3>🪐 YOUR ESTIMATE</h3>
+                    <p style="font-size: 0.9rem; color: var(--text-dim); margin-bottom: 0.8rem;">${s.prompt || ""}</p>
+                    <input type="number" id="input-fermi-guess" placeholder="Enter number..." class="input-code" style="font-size: 1.4rem;" />
+                    <div class="multiplier-pills" style="display: flex; gap: 0.4rem; margin: 0.8rem 0;">
+                        <button class="pill-mag" data-mult="1000">x1K</button>
+                        <button class="pill-mag" data-mult="1000000">x1M</button>
+                        <button class="pill-mag" data-mult="1000000000">x1B</button>
+                    </div>
+                    <button id="btn-submit-fermi" class="btn-primary-action">LOCK IN ESTIMATE</button>
                 </div>
             `;
-        } else if (s.phase === "REVEAL") {
+        } else {
             return `
-                <div class="panel-glass" style="padding: 2rem; text-align: center;">
-                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">${s.is_correct ? "🎉" : "❌"}</div>
-                    <h2 style="color: ${s.is_correct ? "var(--green)" : "#ff0055"};">${s.is_correct ? "CORRECT!" : "WRONG!"}</h2>
-                    <p style="margin-top: 0.5rem;">Streak: <strong>${s.streak || 0}</strong> 🔥</p>
+                <div class="panel-glass">
+                    <h3>VALUE REVEAL</h3>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0.8rem 0;">
+                        Actual: ${s.actual?.toLocaleString()} ${s.unit}
+                    </div>
+                    <p style="color: #888;">+${s.my_result?.points || 0} pts</p>
                 </div>
             `;
         }
-        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Get ready for next question...</p></div>`;
     }
 
-    private renderDoodleController(): string {
+    // 5. AUCTION
+    private renderAuctionController(): string {
         const s = this.state!;
-        if (s.is_drawer && s.phase === "DRAWING") {
-            return `
-                <div class="doodle-phone-canvas">
-                    <div class="doodle-top-bar">
-                        <span>Draw:</span>
-                        <span class="word-to-draw">${s.secret_word}</span>
-                    </div>
-                    <canvas id="mobile-draw-pad" width="320" height="280"></canvas>
-                    <div class="draw-tools">
-                        <button id="btn-clear-draw" class="btn-tool">CLEAR CANVAS</button>
-                    </div>
-                </div>
-            `;
-        } else if (!s.is_drawer && s.phase === "DRAWING") {
-            return `
-                <div class="doodle-phone-guesser">
-                    ${s.has_guessed ? `
-                        <div class="panel-glass" style="padding: 2rem; text-align: center; border-color: var(--green);">
-                            <h3 style="color: var(--green);">YOU GUESSED IT! 🎉</h3>
-                            <p style="color: #aaa; font-size: 0.85rem; margin-top: 0.4rem;">Points awarded! Watch others guess.</p>
-                        </div>
-                    ` : `
-                        <div class="panel-glass" style="padding: 1.5rem;">
-                            <h3>GUESS THE DRAWING</h3>
-                            <div class="guess-form">
-                                <input type="text" id="guess-input" placeholder="Type word..." autocomplete="off" />
-                                <button id="btn-submit-guess">GUESS</button>
-                            </div>
-                        </div>
-                    `}
-                </div>
-            `;
-        } else if (s.phase === "ROUND_SUMMARY") {
-            return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><h3>ROUND COMPLETE</h3><p>The word was: <strong>${s.secret_word}</strong></p></div>`;
-        }
-        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
-    }
-
-    private renderMostLikelyController(): string {
-        const s = this.state!;
-        const promptText = s.question || s.prompt || "Who is most likely to...";
-        if (s.phase === "QUESTION_VOTE" || s.phase === "VOTING") {
-            if (s.has_voted) {
-                const votedCandidate = s.candidates?.find((c: any) => c.id === s.my_vote);
-                const votedName = votedCandidate ? votedCandidate.nickname : "Your pick";
-                return `
-                    <div class="panel-glass" style="padding: 2rem; text-align: center;">
-                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🗳️</div>
-                        <h3>VOTE RECORDED!</h3>
-                        <p style="color: var(--primary); font-weight: bold; margin: 0.5rem 0;">Picked: ${votedName}</p>
-                        <p style="color: #888; font-size: 0.85rem;">Look at the big screen when votes are revealed!</p>
-                    </div>
-                `;
+        if (s.phase === "CATALOG") {
+            return `<div class="panel-glass"><h3>🏛️ LOT CATALOG</h3><p style="color: #888;">Inspect ${s.item_title} on the TV screen!</p></div>`;
+        } else if (s.phase === "BIDDING") {
+            if (s.has_bid) {
+                return `<div class="panel-glass"><h3>✓ BID PLACED</h3><p style="color: #888;">Your secret valuation: $${s.my_bid?.toLocaleString()}</p></div>`;
             }
             return `
-                <div class="mostlikely-phone">
-                    <div class="prompt-box" style="margin-bottom: 1.2rem; text-align: center;">
-                        <span style="font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em;">WHO IS MOST LIKELY TO:</span>
-                        <h2 style="font-size: 1.15rem; color: var(--accent); margin-top: 0.3rem;">"${promptText}"</h2>
-                    </div>
-                    <div class="candidates-vote-grid" style="display: flex; flex-direction: column; gap: 0.6rem;">
-                        ${(s.candidates || []).map((c: any) => `
-                            <button class="btn-mostlikely-candidate ${s.my_vote === c.id ? "selected" : ""}" data-candidate-id="${c.id}" style="display: flex; align-items: center; gap: 0.8rem; padding: 0.85rem 1.2rem; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; color: #fff; font-size: 1rem; cursor: pointer; text-align: left; width: 100%;">
-                                <span style="font-size: 1.4rem;">${c.avatar}</span>
-                                <span style="font-weight: 600;">${c.nickname}</span>
-                            </button>
-                        `).join("")}
-                    </div>
+                <div class="auction-controller">
+                    <h3>🔨 PLACE SECRET BID</h3>
+                    <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 0.8rem;">Closest bid without going over wins!</p>
+                    <input type="number" id="input-auction-bid" placeholder="Amount in USD ($)" class="input-code" style="font-size: 1.4rem;" />
+                    <button id="btn-submit-auction-bid" class="btn-primary-action" style="margin-top: 1rem;">PLACE SECRET BID</button>
                 </div>
             `;
-        } else if (s.phase === "VOTE_REVEAL" || s.phase === "REVEAL") {
+        } else {
             return `
-                <div class="panel-glass" style="padding: 2rem; text-align: center;">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
-                    <h3>RESULTS ON SCREEN!</h3>
-                    <p style="color: #aaa; margin-top: 0.5rem;">Check the TV to see who got roasted and who scored!</p>
+                <div class="panel-glass">
+                    <h3>HAMMER PRICE</h3>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0.8rem 0;">
+                        $${s.hammer_price?.toLocaleString()}
+                    </div>
+                    <p style="color: #888;">${s.my_result?.won_lot ? '🏆 You won the lot!' : (s.my_result?.went_over ? '❌ You went over' : 'Under bid')}</p>
+                    <p style="color: var(--accent);">+${s.my_result?.points || 0} pts</p>
                 </div>
             `;
         }
-        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
     }
 
-    private renderWordBombController(): string {
+    // 6. CIRCLE
+    private renderCircleController(): string {
         const s = this.state!;
-        const strikes = s.strikes !== undefined ? s.strikes : 0;
-        const lives = s.my_lives !== undefined ? s.my_lives : Math.max(0, 3 - strikes);
-        const isAlive = lives > 0;
-        const currentPrompt = s.current_prompt || s.prompt || "...";
-        const isMyTurn = Boolean(s.is_holding_bomb || s.is_active);
-
-        if (!isAlive) {
-            return `
-                <div class="panel-glass" style="padding: 2rem; text-align: center; border-color: var(--red);">
-                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">💀</div>
-                    <h2 style="color: var(--red);">YOU ARE OUT!</h2>
-                    <p style="color: #aaa; font-size: 0.85rem; margin-top: 0.5rem;">You ran out of lives. Cheer for the survivors on TV!</p>
-                </div>
-            `;
-        }
-
-        if (s.phase === "ROUND_ACTIVE" || s.phase === "ROUND") {
-            if (isMyTurn) {
-                return `
-                    <div class="wordbomb-active-turn" style="text-align: center;">
-                        <div style="font-size: 2.5rem; animation: pulse 0.8s infinite alternate;">💣</div>
-                        <h2 style="color: var(--red); margin: 0.3rem 0;">YOUR TURN! DEFUSE IT!</h2>
-                        <div class="letters-prompt-card" style="background: var(--red-subtle); border: 1px solid var(--red); border-radius: 12px; padding: 1rem; margin: 1rem 0;">
-                            <div style="font-size: 0.8rem; color: #aaa; letter-spacing: 0.05em;">MUST CONTAIN:</div>
-                            <div style="font-size: 2.2rem; font-weight: 900; color: #fff; letter-spacing: 0.15em;">${currentPrompt}</div>
-                        </div>
-                        <div class="word-submit-box" style="display: flex; flex-direction: column; gap: 0.8rem;">
-                            <input type="text" id="wordbomb-input" class="input-nick" placeholder="Type a word..." autocomplete="off" autofocus style="text-transform: uppercase; font-size: 1.2rem; text-align: center; font-weight: bold; width: 100%;" />
-                            <button id="btn-submit-wordbomb" class="btn-primary-mobile" style="background: linear-gradient(135deg, #f43f5e, #fb923c); border-color: #fb923c;">PASS BOMB ➔</button>
-                        </div>
-                        <div class="lives-indicator" style="margin-top: 1rem; font-size: 0.9rem; color: #aaa;">
-                            Lives: <span style="letter-spacing: 2px;">${"❤️".repeat(lives)}</span>
-                        </div>
-                    </div>
-                `;
+        if (s.phase === "DRAWING") {
+            if (s.has_drawn) {
+                return `<div class="panel-glass"><h3>✓ CIRCLE SUBMITTED!</h3><p style="color: #888;">Analyzing circularity geometry...</p></div>`;
             }
             return `
-                <div class="wordbomb-waiting-turn panel-glass" style="padding: 2rem; text-align: center;">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⏳</div>
-                    <h3>BOMB IS TICKING!</h3>
-                    <p style="color: var(--accent); margin: 0.5rem 0;"><strong>${s.holder_name || s.active_player_name || "Someone"}</strong> has the bomb!</p>
-                    <div style="background: rgba(255,255,255,0.06); padding: 0.5rem 1rem; border-radius: 20px; display: inline-block; margin-top: 0.5rem;">
-                        Contains: <strong style="color: var(--primary); letter-spacing: 1px;">${currentPrompt}</strong>
-                    </div>
-                    <div class="lives-indicator" style="margin-top: 1.5rem; font-size: 0.9rem; color: #aaa;">
-                        Your Lives: <span style="letter-spacing: 2px;">${"❤️".repeat(lives)}</span>
-                    </div>
-                    <p style="color: #777; font-size: 0.8rem; margin-top: 1rem;">Get ready to type when the bomb is passed to you!</p>
+                <div class="circle-controller">
+                    <h3>⭕ DRAW A CIRCLE</h3>
+                    <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.5rem;">Single smooth closed stroke. Complete the loop!</p>
+                    <canvas id="circle-touch-canvas" width="300" height="300" style="background: rgba(255,255,255,0.03); border: 2px dashed rgba(255,255,255,0.2); border-radius: 50%; touch-action: none; margin: 0 auto; display: block;"></canvas>
                 </div>
             `;
-        } else if (s.phase === "EXPLOSION") {
+        } else {
             return `
-                <div class="panel-glass" style="padding: 2rem; text-align: center;">
-                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">💥</div>
-                    <h2>BOOM!</h2>
-                    <p style="color: #aaa;">${s.last_exploded_player || s.exploded_player_name || "A player"} ran out of time!</p>
+                <div class="panel-glass">
+                    <h3>CIRCULARITY SCORE</h3>
+                    <div style="font-size: 2rem; font-weight: 800; color: var(--primary); margin: 0.8rem 0;">
+                        ${s.my_eval?.score_pct || 0}%
+                    </div>
+                    <p style="color: #888;">+${s.my_eval?.points || 0} pts earned!</p>
                 </div>
             `;
         }
-        return `<div class="panel-glass" style="padding: 2rem; text-align: center;"><p>Look at the Big Screen!</p></div>`;
+    }
+
+    // 7. TROLLEY
+    private renderTrolleyController(): string {
+        const s = this.state!;
+        if (s.phase === "CHOICE") {
+            if (s.has_chosen) {
+                return `<div class="panel-glass"><h3>✓ CHOICE LOCKED</h3><p style="color: #888;">Waiting for room reveal...</p></div>`;
+            }
+            return `
+                <div class="trolley-controller">
+                    <h3>MAKE YOUR CHOICE</h3>
+                    <div class="trolley-choice-cards">
+                        <button class="btn-dilemma-choice" data-choice="A">
+                            <span class="icon">${s.icon_a || "🅰️"}</span>
+                            <strong>OPTION A</strong>
+                            <p>${s.option_a || ""}</p>
+                        </button>
+                        <button class="btn-dilemma-choice" data-choice="B">
+                            <span class="icon">${s.icon_b || "🅱️"}</span>
+                            <strong>OPTION B</strong>
+                            <p>${s.option_b || ""}</p>
+                        </button>
+                    </div>
+                    <label class="consensus-bet-label" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 1rem 0; cursor: pointer;">
+                        <input type="checkbox" id="check-consensus" checked />
+                        <span>I bet the room majority will agree with me (+500 pts)</span>
+                    </label>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="panel-glass">
+                    <h3>ROOM CONSENSUS</h3>
+                    <p style="color: #888;">Majority: Option ${s.majority_choice || 'TIE'}</p>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: var(--primary); margin: 0.8rem 0;">
+                        ${s.my_result?.predicted_correctly ? '🎯 Prediction Correct!' : '❌ Missed Consensus'}
+                    </div>
+                    <p style="color: var(--accent);">+${s.my_result?.points || 0} pts</p>
+                </div>
+            `;
+        }
+    }
+
+    // 8. TRENDS
+    private renderTrendsController(): string {
+        const s = this.state!;
+        if (s.phase === "GUESS") {
+            if (s.has_guessed) {
+                return `<div class="panel-glass"><h3>✓ GUESS LOCKED</h3><p style="color: #888;">Guessed: ${s.my_guess}. Watching reveal...</p></div>`;
+            }
+            return `
+                <div class="trends-controller">
+                    <h3>HIGHER OR LOWER?</h3>
+                    <p style="color: var(--text-dim); margin-bottom: 1rem;">Does ${s.item_b?.name} have HIGHER or LOWER monthly searches?</p>
+                    <div class="trends-btn-row" style="display: flex; gap: 1rem;">
+                        <button class="btn-trend-action btn-higher" data-trend="HIGHER" style="flex: 1; padding: 1.5rem; font-size: 1.3rem; border-radius: 16px; background: #10b981; color: white; border: none; font-weight: 700;">
+                            ▲ HIGHER
+                        </button>
+                        <button class="btn-trend-action btn-lower" data-trend="LOWER" style="flex: 1; padding: 1.5rem; font-size: 1.3rem; border-radius: 16px; background: #f43f5e; color: white; border: none; font-weight: 700;">
+                            ▼ LOWER
+                        </button>
+                    </div>
+                    <div class="streak-indicator" style="margin-top: 1.5rem; color: #f59e0b; font-weight: 600;">
+                        🔥 Current Streak: ${s.my_streak || 0}
+                    </div>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="panel-glass">
+                    <h3>TRENDS REVEAL</h3>
+                    <div style="font-size: 1.4rem; font-weight: 700; color: var(--primary); margin: 0.8rem 0;">
+                        ${s.my_result?.is_correct ? '✓ Correct Guess!' : '❌ Incorrect'}
+                    </div>
+                    <p style="color: #888;">Streak: ${s.my_result?.streak || 0}</p>
+                    <p style="color: var(--accent);">+${s.my_result?.points || 0} pts</p>
+                </div>
+            `;
+        }
     }
 
     private bindControllerActions() {
-        // Most Likely To voting
-        this.container.querySelectorAll(".btn-mostlikely-candidate").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                const targetId = (e.currentTarget as HTMLElement).dataset.candidateId;
-                if (targetId) this.socket.send("GAME_ACTION", { action: "CAST_VOTE", data: { target_id: targetId } });
-            });
-        });
-
-        // Word Bomb submit word
-        const submitWordBomb = () => {
-            const input = this.container.querySelector("#wordbomb-input") as HTMLInputElement;
-            if (input && input.value.trim()) {
-                this.socket.send("GAME_ACTION", { action: "SUBMIT_WORD", data: { word: input.value.trim() } });
-                input.value = "";
-            }
-        };
-        this.container.querySelector("#btn-submit-wordbomb")?.addEventListener("click", submitWordBomb);
-        this.container.querySelector("#wordbomb-input")?.addEventListener("keydown", (e: Event) => {
-            if ((e as KeyboardEvent).key === "Enter") {
-                e.preventDefault();
-                submitWordBomb();
-            }
-        });
-
-        // Target buttons
-        this.container.querySelectorAll(".btn-target, .btn-skip").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                const el = e.currentTarget as HTMLElement;
-                const target = el.dataset.target;
-                const action = el.dataset.action;
-                if (target && action) this.socket.send("GAME_ACTION", { action, data: { target_id: target } });
-            });
-        });
-
-        // WitClash submit punchline
-        this.container.querySelectorAll(".btn-submit-punchline").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                const pId = parseInt((e.currentTarget as HTMLElement).dataset.promptId || "0", 10);
-                const input = this.container.querySelector(`#prompt-ans-${pId}`) as HTMLInputElement;
-                if (input && input.value.trim()) {
-                    this.socket.send("GAME_ACTION", { action: "SUBMIT_ANSWER", data: { prompt_id: pId, answer: input.value.trim() } });
+        // Candidate selection (Mafia & Imposter)
+        this.container.querySelectorAll(".btn-candidate").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const action = btn.getAttribute("data-action");
+                const targetId = btn.getAttribute("data-target-id");
+                if (action && targetId) {
+                    this.socket.send("GAME_ACTION", { action, data: { target_id: targetId } });
                 }
             });
         });
 
-        // WitClash voting
-        this.container.querySelectorAll(".btn-vote-choice").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                const choice = parseInt((e.currentTarget as HTMLElement).dataset.choice || "1", 10);
-                this.socket.send("GAME_ACTION", { action: "CAST_VOTE", data: { choice } });
-            });
-        });
-
-        // Trivia options
-        this.container.querySelectorAll(".btn-trivia-opt").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                const choice = parseInt((e.currentTarget as HTMLElement).dataset.choice || "0", 10);
-                this.socket.send("GAME_ACTION", { action: "SUBMIT_ANSWER", data: { choice } });
-            });
-        });
-
-        // Imposter card privacy toggle
-        this.container.querySelector("#btn-toggle-card")?.addEventListener("click", () => {
-            this.cardHidden = !this.cardHidden;
-            this.render();
-        });
-
-        const cardBox = this.container.querySelector("#card-box-toggle");
-        if (cardBox) {
-            cardBox.addEventListener("click", (e) => {
-                if ((e.target as HTMLElement).closest("#btn-toggle-hint")) return;
-                this.cardHidden = !this.cardHidden;
-                this.render();
-            });
-        }
-
-        // Imposter hint toggle
-        this.container.querySelector("#btn-toggle-hint")?.addEventListener("click", (e) => {
-            e.stopPropagation();
-            this.hintRevealed = !this.hintRevealed;
-            this.render();
-        });
-
         // Imposter guess
-        this.container.querySelector("#btn-submit-imp-guess")?.addEventListener("click", () => {
-            const input = this.container.querySelector("#imp-guess-input") as HTMLInputElement;
-            if (input?.value.trim()) this.socket.send("GAME_ACTION", { action: "SUBMIT_GUESS", data: { guess: input.value.trim() } });
-        });
-
-        // DoodleDash guess
-        this.container.querySelector("#btn-submit-guess")?.addEventListener("click", () => {
-            const input = this.container.querySelector("#guess-input") as HTMLInputElement;
-            if (input?.value.trim()) {
-                this.socket.send("GAME_ACTION", { action: "SUBMIT_GUESS", data: { guess: input.value.trim() } });
-                input.value = "";
+        this.container.querySelector("#btn-submit-imposter-guess")?.addEventListener("click", () => {
+            const input = this.container.querySelector("#input-imposter-guess") as HTMLInputElement;
+            if (input && input.value.trim()) {
+                this.socket.send("GAME_ACTION", { action: "GUESS_WORD", data: { guess: input.value.trim() } });
             }
         });
 
-        // Touch drawing pad
-        const canvas = this.container.querySelector("#mobile-draw-pad") as HTMLCanvasElement;
+        // Dialed sliders
+        const sliderHue = this.container.querySelector("#slider-hue") as HTMLInputElement;
+        const sliderSat = this.container.querySelector("#slider-sat") as HTMLInputElement;
+        const swatch = this.container.querySelector("#dial-swatch") as HTMLElement;
+
+        if (sliderHue && sliderSat && swatch) {
+            const updateSwatch = () => {
+                this.dialHue = parseInt(sliderHue.value, 10);
+                this.dialSat = parseInt(sliderSat.value, 10);
+                swatch.style.background = `hsl(${this.dialHue}, ${this.dialSat}%, 50%)`;
+                const hueLabel = sliderHue.parentElement?.querySelector("label");
+                if (hueLabel) hueLabel.textContent = `HUE (${this.dialHue}°)`;
+                const satLabel = sliderSat.parentElement?.querySelector("label");
+                if (satLabel) satLabel.textContent = `SATURATION (${this.dialSat}%)`;
+            };
+            sliderHue.addEventListener("input", updateSwatch);
+            sliderSat.addEventListener("input", updateSwatch);
+        }
+
+        const sliderPitch = this.container.querySelector("#slider-pitch") as HTMLInputElement;
+        if (sliderPitch) {
+            sliderPitch.addEventListener("input", () => {
+                this.dialPitch = parseInt(sliderPitch.value, 10);
+                const pitchLabel = sliderPitch.parentElement?.querySelector("label");
+                if (pitchLabel) pitchLabel.textContent = `FREQUENCY (${this.dialPitch} Hz)`;
+            });
+        }
+
+        this.container.querySelector("#btn-test-tone")?.addEventListener("click", () => {
+            soundManager.playTone(this.dialPitch, 0.4);
+        });
+
+        this.container.querySelector("#btn-lock-dial")?.addEventListener("click", () => {
+            if (this.state?.round_type === "COLOR") {
+                this.socket.send("GAME_ACTION", {
+                    action: "SUBMIT_DIAL",
+                    data: { h: this.dialHue, s: this.dialSat / 100.0, v: 1.0 }
+                });
+            } else {
+                this.socket.send("GAME_ACTION", {
+                    action: "SUBMIT_DIAL",
+                    data: { pitch: this.dialPitch }
+                });
+            }
+        });
+
+        // Fermi magnitude multipliers and submit
+        this.container.querySelectorAll(".pill-mag").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const mult = parseFloat(btn.getAttribute("data-mult") || "1");
+                const input = this.container.querySelector("#input-fermi-guess") as HTMLInputElement;
+                if (input) {
+                    const current = parseFloat(input.value) || 1;
+                    input.value = `${current * mult}`;
+                }
+            });
+        });
+
+        this.container.querySelector("#btn-submit-fermi")?.addEventListener("click", () => {
+            const input = this.container.querySelector("#input-fermi-guess") as HTMLInputElement;
+            if (input && input.value) {
+                this.socket.send("GAME_ACTION", {
+                    action: "SUBMIT_GUESS",
+                    data: { guess: parseFloat(input.value) }
+                });
+            }
+        });
+
+        // Auction bid
+        this.container.querySelector("#btn-submit-auction-bid")?.addEventListener("click", () => {
+            const input = this.container.querySelector("#input-auction-bid") as HTMLInputElement;
+            if (input && input.value) {
+                this.socket.send("GAME_ACTION", {
+                    action: "SUBMIT_BID",
+                    data: { bid: parseInt(input.value, 10) }
+                });
+            }
+        });
+
+        // Circle drawing canvas (zero network flood during stroke!)
+        const canvas = this.container.querySelector("#circle-touch-canvas") as HTMLCanvasElement;
         if (canvas) {
             const ctx = canvas.getContext("2d");
             if (ctx) {
+                ctx.lineWidth = 4;
                 ctx.lineCap = "round";
                 ctx.lineJoin = "round";
-                ctx.lineWidth = 4;
-                ctx.strokeStyle = "#1e293b";
-
-                const getPt = (e: PointerEvent) => {
-                    const rect = canvas.getBoundingClientRect();
-                    return {
-                        x: (e.clientX - rect.left) * (canvas.width / rect.width),
-                        y: (e.clientY - rect.top) * (canvas.height / rect.height)
-                    };
-                };
-
-                canvas.addEventListener("pointerdown", (e) => {
-                    canvas.setPointerCapture(e.pointerId);
-                    this.isDrawing = true;
-                    const pt = getPt(e);
-                    this.lastDrawPt = pt;
-                    ctx.beginPath();
-                    ctx.moveTo(pt.x, pt.y);
-                    this.socket.send("GAME_ACTION", { action: "DRAW_STROKE", data: { stroke: { type: "start", x: pt.x, y: pt.y } } });
-                });
-
-                let lastEmitTime = 0;
-                canvas.addEventListener("pointermove", (e) => {
-                    if (!this.isDrawing || !this.lastDrawPt) return;
-                    const pt = getPt(e);
-                    ctx.lineTo(pt.x, pt.y);
-                    ctx.stroke();
-                    this.lastDrawPt = pt;
-                    const now = performance.now();
-                    if (now - lastEmitTime >= 16) {
-                        lastEmitTime = now;
-                        this.socket.send("GAME_ACTION", { action: "DRAW_STROKE", data: { stroke: { type: "move", x: pt.x, y: pt.y } } });
-                    }
-                });
-
-                const stopDraw = () => {
-                    if (this.isDrawing) {
-                        this.isDrawing = false;
-                        this.lastDrawPt = null;
-                        this.socket.send("GAME_ACTION", { action: "DRAW_STROKE", data: { stroke: { type: "end" } } });
-                    }
-                };
-                canvas.addEventListener("pointerup", stopDraw);
-                canvas.addEventListener("pointercancel", stopDraw);
+                ctx.strokeStyle = "#00f0ff";
             }
 
-            this.container.querySelector("#btn-clear-draw")?.addEventListener("click", () => {
-                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-                this.socket.send("GAME_ACTION", { action: "CLEAR_CANVAS" });
+            const getPos = (e: PointerEvent) => {
+                const rect = canvas.getBoundingClientRect();
+                return [e.clientX - rect.left, e.clientY - rect.top] as [number, number];
+            };
+
+            canvas.addEventListener("pointerdown", (e) => {
+                canvas.setPointerCapture(e.pointerId);
+                this.isDrawingCircle = true;
+                this.circlePoints = [];
+                const [x, y] = getPos(e);
+                this.circlePoints.push([x, y]);
+                if (ctx) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                }
             });
+
+            canvas.addEventListener("pointermove", (e) => {
+                if (!this.isDrawingCircle) return;
+                const [x, y] = getPos(e);
+                this.circlePoints.push([x, y]);
+                if (ctx) {
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                }
+            });
+
+            const finishCircle = () => {
+                if (!this.isDrawingCircle) return;
+                this.isDrawingCircle = false;
+                if (this.circlePoints.length >= 20) {
+                    // Send single message with array of points on stroke end
+                    this.socket.send("GAME_ACTION", {
+                        action: "SUBMIT_CIRCLE",
+                        data: { points: this.circlePoints }
+                    });
+                }
+            };
+
+            canvas.addEventListener("pointerup", finishCircle);
+            canvas.addEventListener("pointercancel", finishCircle);
         }
+
+        // Trolley choice
+        this.container.querySelectorAll(".btn-dilemma-choice").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const choice = btn.getAttribute("data-choice");
+                const betMajority = (this.container.querySelector("#check-consensus") as HTMLInputElement)?.checked ?? true;
+                if (choice) {
+                    this.socket.send("GAME_ACTION", {
+                        action: "SUBMIT_CHOICE",
+                        data: { choice, bet_majority: betMajority }
+                    });
+                }
+            });
+        });
+
+        // Trends guess
+        this.container.querySelectorAll(".btn-trend-action").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const trend = btn.getAttribute("data-trend");
+                if (trend) {
+                    this.socket.send("GAME_ACTION", {
+                        action: "SUBMIT_GUESS",
+                        data: { guess: trend }
+                    });
+                }
+            });
+        });
     }
 }

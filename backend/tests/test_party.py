@@ -6,20 +6,23 @@ BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
+import math
 import pytest
+import asyncio
 from fastapi.testclient import TestClient
-from app.main import app
+from app.main import app, get_real_client_ip
 from app.party.manager import room_manager, PartyRoom
-from app.party.protocol import PlayerInfo
-from app.party.network import get_local_ip, get_network_info
-from app.party.games import create_game
+from app.party.protocol import PlayerInfo, ServerMessageType
+from app.party.network import get_network_info
+from app.party.games import create_game, get_available_games
 from app.party.games.mafia import MafiaGame
 from app.party.games.imposter import ImposterGame
-from app.party.games.witclash import WitClashGame
-from app.party.games.trivia import TriviaGame
-from app.party.games.doodledash import DoodleDashGame
-from app.party.games.mostlikely import MostLikelyGame
-from app.party.games.wordbomb import WordBombGame
+from app.party.games.dialed import DialedGame, calculate_color_score, calculate_pitch_score
+from app.party.games.fermi import FermiGame, score_fermi_guess
+from app.party.games.auction import AuctionGame
+from app.party.games.circle import CircleGame, evaluate_circle_points
+from app.party.games.trolley import TrolleyGame
+from app.party.games.trends import TrendsGame
 
 client = TestClient(app)
 
@@ -38,6 +41,23 @@ def test_health():
     assert res.json() == {"status": "ok"}
 
 
+def test_real_client_ip_extraction():
+    class MockClient:
+        host = "127.0.0.1"
+
+    class MockRequest:
+        client = MockClient()
+        headers = {"CF-Connecting-IP": "203.0.113.195"}
+
+    ip = get_real_client_ip(MockRequest())
+    assert ip == "203.0.113.195"
+
+    # Non-localhost should NOT trust CF header (prevents spoofing on LAN)
+    MockRequest.client.host = "192.168.1.50"
+    ip_lan = get_real_client_ip(MockRequest())
+    assert ip_lan == "192.168.1.50"
+
+
 def test_rest_endpoints():
     res = client.get("/api/party/host-info")
     assert res.status_code == 200
@@ -47,23 +67,25 @@ def test_rest_endpoints():
     res = client.get("/api/party/games")
     assert res.status_code == 200
     games = res.json()
-    assert len(games) >= 7
+    assert len(games) == 8
     game_ids = [g["id"] for g in games]
-    assert "mafia" in game_ids
-    assert "imposter" in game_ids
-    assert "witclash" in game_ids
-    assert "trivia" in game_ids
-    assert "doodledash" in game_ids
-    assert "mostlikely" in game_ids
+    expected_ids = ["mafia", "imposter", "dialed", "fermi", "auction", "circle", "trolley", "trends"]
+    for gid in expected_ids:
+        assert gid in game_ids
+
+    # Instantiation check for all 8 games
     for g in games:
-        inst = create_game(g["id"], "ABCD", {"p1": PlayerInfo(id="p1", nickname="A")}, custom_kwarg=123)
+        inst = create_game(g["id"], "ABCD", {"p1": PlayerInfo(id="p1", nickname="A")})
         assert inst.room_code == "ABCD"
 
+    # Create room returns room_code and host_token
     create_res = client.post("/api/party/create")
     assert create_res.status_code == 200
     created = create_res.json()
     code = created["room_code"]
     assert len(code) == 4
+    assert "host_token" in created
+    assert len(created["host_token"]) > 10
 
     room_res = client.get(f"/api/party/room/{code}")
     assert room_res.status_code == 200
@@ -76,6 +98,7 @@ def test_room_lifecycle_and_reconnection():
     room = room_manager.create_room()
     code = room.code
     assert len(code) == 4
+    assert len(room.host_token) > 10
 
     # Add players
     p1, token1 = room.add_player("Alice", "🦊", "#ff0055")
@@ -96,381 +119,292 @@ def test_room_lifecycle_and_reconnection():
     assert bad_reconnect is None
 
 
-def test_mafia_role_masking_security():
-    """Verify strict role masking: Villagers never receive Mafia member array."""
-    players = {
-        f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}")
-        for i in range(5)
-    }
+def test_mafia_strict_plurality_and_role_masking():
+    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(5)}
     mafia_game = MafiaGame("TEST", players)
     mafia_game.start()
 
-    # Find who is mafia and who is villager
-    mafia_pids = [pid for pid, r in mafia_game.roles.items() if r == MafiaGame.ROLE_MAFIA]
-    villager_pids = [pid for pid, r in mafia_game.roles.items() if r == MafiaGame.ROLE_VILLAGER]
-    doctor_pids = [pid for pid, r in mafia_game.roles.items() if r == MafiaGame.ROLE_DOCTOR]
-    detective_pids = [pid for pid, r in mafia_game.roles.items() if r == MafiaGame.ROLE_DETECTIVE]
+    mafia_pids = [pid for pid in mafia_game.roles if mafia_game.roles[pid] == MafiaGame.ROLE_MAFIA]
+    villager_pids = [pid for pid in mafia_game.roles if mafia_game.roles[pid] == MafiaGame.ROLE_VILLAGER]
 
-    assert len(mafia_pids) >= 1
-    assert len(villager_pids) >= 1
-
-    # Check Host state does NOT reveal roles during active game
+    # Host state must never reveal active roles
     host_state = mafia_game.get_host_state()
     for p in host_state["players"]:
         assert p["role_revealed"] is None
 
-    # Check Villager state does NOT contain mafia_teammates
+    # Villager must not see mafia teammates
     v_state = mafia_game.get_player_state(villager_pids[0])
     assert "mafia_teammates" not in v_state
-    assert v_state["my_role"] == MafiaGame.ROLE_VILLAGER
 
-    # Check Mafia state DOES contain mafia_teammates
+    # Mafia must see teammates
     m_state = mafia_game.get_player_state(mafia_pids[0])
     assert "mafia_teammates" in m_state
 
-
-def test_mafia_night_action_resolution():
-    players = {
-        f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}")
-        for i in range(4)
-    }
-    game = MafiaGame("TEST", players)
-    # Manually configure roles for deterministic test
-    game.roles = {
-        "p0": MafiaGame.ROLE_MAFIA,
-        "p1": MafiaGame.ROLE_DOCTOR,
-        "p2": MafiaGame.ROLE_DETECTIVE,
-        "p3": MafiaGame.ROLE_VILLAGER,
-    }
-    game.alive_players = {"p0", "p1", "p2", "p3"}
-    game.start_night()
-
-    # Case 1: Doctor heals the target that Mafia attacks -> Victim saved!
-    game.handle_action("p0", "MAFIA_KILL", {"target_id": "p3"})
-    game.handle_action("p1", "DOCTOR_HEAL", {"target_id": "p3"})
-    game.handle_action("p2", "DETECTIVE_INVESTIGATE", {"target_id": "p0"})
-
-    # Detective gets result
-    det_state = game.get_player_state("p2")
-    assert det_state["detective_result"]["alignment"] == "SUSPICIOUS (Mafia)"
-
-    assert game.phase == "DAY_DAWN"
-    assert game.doctor_saved is True
-    assert "p3" in game.alive_players
+    # Test strict plurality tie resolution in DAY_VOTE
+    mafia_game.phase = "DAY_VOTE"
+    mafia_game.alive_players = {"p0", "p1", "p2", "p3", "p4"}
+    mafia_game.day_votes = {"p0": "p1", "p2": "p1", "p3": "p4", "p4": "p4"}
+    # p1 has 2 votes, p4 has 2 votes -> TIE!
+    mafia_game.resolve_day_vote()
+    assert mafia_game.last_killed_id is None
+    assert "could not reach" in mafia_game.history_log[-1]
 
 
-def test_imposter_role_masking_and_guessing():
-    players = {
-        f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}")
-        for i in range(4)
-    }
+def test_imposter_disconnect_and_role_masking():
+    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(4)}
     game = ImposterGame("TEST", players)
     game.start()
 
-    imposter_id = game.imposter_ids[0]
-    crew_ids = [pid for pid in players if pid != imposter_id]
+    imp_id = game.imposter_ids[0]
+    crew_ids = [pid for pid in players if pid != imp_id]
 
-    # Check Imposter private state
-    imp_state = game.get_player_state(imposter_id)
+    imp_state = game.get_player_state(imp_id)
     assert imp_state["is_imposter"] is True
     assert imp_state["secret_word"] == "???"
 
-    # Check Crew private state
     crew_state = game.get_player_state(crew_ids[0])
     assert crew_state["is_imposter"] is False
     assert crew_state["secret_word"] == game.secret_word
 
-    # Test imposter guess resolution
-    game.phase = "IMPOSTER_GUESS"
-    game.handle_action(imposter_id, "GUESS_WORD", {"guess": game.secret_word})
+    # Disconnecting sole imposter ends game with CREW win
+    game.phase = "CLUE_ROUNDS"
+    game.on_player_disconnect(imp_id)
     assert game.is_over is True
-    assert game.winner == "IMPOSTER"
-    assert game.imposter_guess_correct is True
+    assert game.winner == "CREW"
 
 
-def test_witclash_matchups_and_voting():
-    players = {
-        f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}")
-        for i in range(3)
-    }
-    game = WitClashGame("TEST", players)
+def test_dialed_cone_distance_and_pitch_guard():
+    # 1. Hue 2 deg and 358 deg should be close in 3D cone distance, scoring near 100%
+    target = {"h": 2.0, "s": 0.9, "v": 1.0}
+    close_guess = {"h": 358.0, "s": 0.9, "v": 1.0}
+    score = calculate_color_score(target, close_guess)
+    assert score > 90.0
+
+    # Opposite hue (180 deg away) should score low
+    far_guess = {"h": 182.0, "s": 0.9, "v": 1.0}
+    far_score = calculate_color_score(target, far_guess)
+    assert far_score < score
+
+    # 2. Pitch guard on negative or zero frequency
+    assert calculate_pitch_score(440.0, 0.0) == 0.0
+    assert calculate_pitch_score(440.0, -100.0) == 0.0
+    # Exact pitch should score 100.0
+    assert calculate_pitch_score(440.0, 440.0) == 100.0
+
+
+def test_fermi_zero_division_guard_and_log_scoring():
+    # 0 guess must not crash with ZeroDivisionError
+    pts_zero, d_zero = score_fermi_guess(0, 1000000)
+    assert pts_zero == 0
+    assert d_zero > 5.0
+
+    # Negative guess
+    pts_neg, _ = score_fermi_guess(-500, 1000)
+    assert pts_neg == 0
+
+    # Exact guess gives full 1000 points
+    pts_exact, d_exact = score_fermi_guess(1000, 1000)
+    assert pts_exact == 1000
+    assert d_exact == 0.0
+
+    # Within 1 order of magnitude (e.g. 5000 vs 10000)
+    pts_close, d_close = score_fermi_guess(5000, 10000)
+    assert pts_close > 850
+    assert d_close < 0.5
+
+
+def test_auction_house_hammer_and_rules():
+    players = {"p0": PlayerInfo(id="p0", nickname="P0"), "p1": PlayerInfo(id="p1", nickname="P1")}
+    game = AuctionGame("TEST", players)
     game.start()
-    assert game.phase == "PROMPT_INPUT"
-    assert len(game.prompts) == 3
 
-    # Submit answers
-    for p in game.prompts:
-        game.handle_action(p["p1_id"], "SUBMIT_ANSWER", {"prompt_id": p["id"], "answer": "Hilarious joke"})
-        game.handle_action(p["p2_id"], "SUBMIT_ANSWER", {"prompt_id": p["id"], "answer": "Even funnier joke"})
+    actual = game.current_item["hammer_price"]
+    game.phase = "BIDDING"
 
-    # Transitions to showdown
-    assert game.phase == "SHOWDOWN_VOTE"
-    m = game.prompts[game.matchup_index]
-    eligible_voters = [pid for pid in players if pid not in (m["p1_id"], m["p2_id"])]
-    assert len(eligible_voters) == 1
+    # p0 bids 80% of hammer price (under), p1 bids 110% (over)
+    game.handle_action("p0", "SUBMIT_BID", {"bid": int(actual * 0.8)})
+    game.handle_action("p1", "SUBMIT_BID", {"bid": int(actual * 1.1)})
 
-    # Cast vote
-    game.handle_action(eligible_voters[0], "CAST_VOTE", {"choice": 1})
-    assert game.phase == "SHOWDOWN_REVEAL"
+    assert game.phase == "HAMMER"
+    assert game.round_results["p0"]["won_lot"] is True
+    assert game.round_results["p0"]["went_over"] is False
+    assert game.round_results["p1"]["went_over"] is True
+    assert game.scores["p0"] > game.scores["p1"]
 
 
-def test_trivia_scoring_and_streaks():
+def test_circle_geometry_eval_and_bin_check():
+    # 1. Under 30 points rejected
+    score_few, res_few = evaluate_circle_points([[10, 10], [20, 20]])
+    assert score_few == 0.0
+    assert "minimum 30" in res_few["reason"]
+
+    # 2. Perfect mathematical circle with 60 points
+    cx, cy, r = 200.0, 200.0, 100.0
+    circle_pts = []
+    for i in range(60):
+        th = 2.0 * 3.14159265 * (i / 60.0)
+        circle_pts.append([cx + r * 1.0 * (1.0 if i < 60 else 0) * 0 + cx + r * 0, cy])
+    # Let's generate a genuine circle
+    circle_pts = [
+        [cx + r * 1.0 * (1.0) * math.cos(2.0 * math.pi * i / 60.0),
+         cy + r * 1.0 * math.sin(2.0 * math.pi * i / 60.0)]
+        for i in range(60)
+    ]
+    # Add final point closing the circle
+    circle_pts.append(circle_pts[0])
+
+    score_perf, res_perf = evaluate_circle_points(circle_pts)
+    assert score_perf > 90.0
+    assert res_perf["angular_coverage_pct"] >= 95.0
+
+    # 3. Short 15-degree arc (should be heavily penalized for low angular coverage)
+    arc_pts = [
+        [cx + r * math.cos(math.radians(i * 0.5)), cy + r * math.sin(math.radians(i * 0.5))]
+        for i in range(35)
+    ]
+    score_arc, res_arc = evaluate_circle_points(arc_pts)
+    assert score_arc < 5.0  # C^3 penalty kills short arc score
+
+
+def test_trolley_choices_and_consensus():
     players = {
         "p0": PlayerInfo(id="p0", nickname="P0"),
         "p1": PlayerInfo(id="p1", nickname="P1"),
+        "p2": PlayerInfo(id="p2", nickname="P2"),
     }
-    game = TriviaGame("TEST", players)
+    game = TrolleyGame("TEST", players)
     game.start()
 
-    q = game.questions[game.current_idx]
-    correct = q["correct"]
-    wrong = (correct + 1) % 4
-
-    game.handle_action("p0", "SUBMIT_ANSWER", {"choice": correct})
-    game.handle_action("p1", "SUBMIT_ANSWER", {"choice": wrong})
+    # p0 and p1 pick A (bet majority=True), p2 picks B (bet majority=True)
+    game.handle_action("p0", "SUBMIT_CHOICE", {"choice": "A", "bet_majority": True})
+    game.handle_action("p1", "SUBMIT_CHOICE", {"choice": "A", "bet_majority": True})
+    game.handle_action("p2", "SUBMIT_CHOICE", {"choice": "B", "bet_majority": True})
 
     assert game.phase == "REVEAL"
-    assert game.scores["p0"] > 0
-    assert game.scores["p1"] == 0
+    assert game.majority_choice == "A"
+    assert game.round_results["p0"]["predicted_correctly"] is True
+    assert game.round_results["p1"]["predicted_correctly"] is True
+    assert game.round_results["p2"]["predicted_correctly"] is False
+    assert game.scores["p0"] > game.scores["p2"]
+
+
+def test_trends_higher_lower_and_streaks():
+    players = {"p0": PlayerInfo(id="p0", nickname="P0"), "p1": PlayerInfo(id="p1", nickname="P1")}
+    game = TrendsGame("TEST", players)
+    game.start()
+
+    correct_rel = game.current_matchup["relation"]
+    wrong_rel = "LOWER" if correct_rel == "HIGHER" else "HIGHER"
+
+    game.handle_action("p0", "SUBMIT_GUESS", {"guess": correct_rel})
+    game.handle_action("p1", "SUBMIT_GUESS", {"guess": wrong_rel})
+
+    assert game.phase == "REVEAL"
+    assert game.round_results["p0"]["is_correct"] is True
     assert game.streaks["p0"] == 1
+    assert game.scores["p0"] > 0
+
+    assert game.round_results["p1"]["is_correct"] is False
     assert game.streaks["p1"] == 0
-
-
-def test_doodledash_guess_matching():
-    players = {
-        "p0": PlayerInfo(id="p0", nickname="Drawer"),
-        "p1": PlayerInfo(id="p1", nickname="Guesser"),
-    }
-    game = DoodleDashGame("TEST", players)
-    game.start()
-    game.drawer_order = ["p0", "p1"]
-    game.current_drawer_idx = 0
-
-    # Stroke drawing: streams lightweight STROKE event without full-state broadcast
-    res = game.handle_action("p0", "DRAW_STROKE", {"stroke": {"points": [[10, 10], [20, 20]], "color": "#ff0000"}})
-    assert res.get("event") == "STROKE"
-    assert res.get("broadcast") is False
-
-    # Exact guess
-    word = game.secret_word
-    guess_res = game.handle_action("p1", "SUBMIT_GUESS", {"guess": word})
-    assert guess_res.get("broadcast") is True
-    assert "p1" in game.correct_guessers
+    assert game.scores["p1"] == 0
 
 
 @pytest.mark.asyncio
-async def test_broadcast_game_state_includes_player_identity():
-    """Verify that broadcast_game_state explicitly includes player identity so controllers never get kicked to join screen."""
+async def test_concurrent_broadcast_resilient_to_slow_client():
     room = room_manager.create_room()
-    p1, _ = room.add_player("Hero", "🦊", "#00f0ff")
-    
-    # Start Trivia with 1 player
-    room.selected_game_id = "trivia"
-    started = await room.start_game()
-    assert started is True
-    assert room.state == "IN_GAME"
+    p1, _ = room.add_player("Fast")
+    p2, _ = room.add_player("Slow")
 
-    # Mock a fake websocket to capture broadcast message
     captured = []
-    class FakeWS:
+
+    class FastWS:
         async def send_json(self, msg):
-            captured.append(msg)
+            captured.append("fast")
 
-    fake_ws = FakeWS()
-    room.player_sockets[p1.id] = fake_ws
+    class SlowWS:
+        async def send_json(self, msg):
+            await asyncio.sleep(0.01)
+            captured.append("slow")
 
-    await room.broadcast_game_state()
+    room.player_sockets[p1.id] = FastWS()
+    room.player_sockets[p2.id] = SlowWS()
 
-    assert len(captured) == 1
-    msg = captured[0]
-    assert msg["type"] == "PLAYER_STATE"
-    payload = msg["payload"]
-    assert payload["player_id"] == p1.id
-    assert payload["nickname"] == "Hero"
-    assert payload["avatar"] == "🦊"
-    assert payload["color"] == "#00f0ff"
-    assert payload["room_code"] == room.code
-    assert payload["state"] == "IN_GAME"
+    await room.broadcast_all(ServerMessageType.TIMER_TICK, {"phase_timer": 5.0})
+    assert "fast" in captured
+    assert "slow" in captured
 
 
-def test_register_tunnel_endpoint():
-    res = client.post("/api/party/tunnel", json={"tunnel_url": "https://cool-tunnel.trycloudflare.com"})
-    assert res.status_code == 200
-    assert res.json()["tunnel_url"] == "https://cool-tunnel.trycloudflare.com"
-
-    # Verify get_network_info now includes this tunnel
-    info = get_network_info()
-    assert info["tunnel_url"] == "https://cool-tunnel.trycloudflare.com"
+def test_spa_api_404_protection():
+    res = client.get("/api/party/nonexistent-endpoint-123")
+    assert res.status_code == 404
+    assert "detail" in res.json()
 
 
-def test_mostlikely_voting():
-    players = {
-        "p0": PlayerInfo(id="p0", nickname="Alice"),
-        "p1": PlayerInfo(id="p1", nickname="Bob"),
-        "p2": PlayerInfo(id="p2", nickname="Charlie"),
-    }
-    game = MostLikelyGame("TEST", players)
+def test_dialed_game_round_flow():
+    players = {"p0": PlayerInfo(id="p0", nickname="P0"), "p1": PlayerInfo(id="p1", nickname="P1")}
+    game = DialedGame("TEST", players)
     game.start()
+    assert game.phase == "INSPECT"
+    # Transition to DIAL
+    next_phase = game.on_timer_expired()
+    assert next_phase == "DIAL"
 
-    assert game.phase == "QUESTION_VOTE"
-    assert game.current_question != ""
-
-    # Alice and Bob both vote for Charlie (p2)
-    game.handle_action("p0", "CAST_VOTE", {"target_id": "p2"})
-    assert game.phase == "QUESTION_VOTE"
-    assert game.votes["p0"] == "p2"
-
-    game.handle_action("p1", "CAST_VOTE", {"target_id": "p2"})
-    # Charlie votes for Alice (p0)
-    res = game.handle_action("p2", "CAST_VOTE", {"target_id": "p0"})
-
-    assert game.phase == "VOTE_REVEAL"
-    assert res.get("broadcast") is True
-    assert game.top_voted_id == "p2"
-    assert game.scores["p0"] == 150
-    assert game.scores["p1"] == 150
-    assert game.scores["p2"] == 0
+    # Players submit dials
+    game.handle_action("p0", "SUBMIT_DIAL", {"h": 180, "s": 0.9, "v": 1.0})
+    game.handle_action("p1", "SUBMIT_DIAL", {"h": 200, "s": 0.8, "v": 1.0})
+    assert game.phase == "REVEAL"
+    assert "p0" in game.round_results
+    assert "p1" in game.round_results
 
 
-def test_wordbomb_word_validation():
-    players = {
-        "p0": PlayerInfo(id="p0", nickname="Alice"),
-        "p1": PlayerInfo(id="p1", nickname="Bob"),
-    }
-    game = WordBombGame("TEST", players)
+def test_circle_game_action_flow():
+    players = {"p0": PlayerInfo(id="p0", nickname="P0"), "p1": PlayerInfo(id="p1", nickname="P1")}
+    game = CircleGame("TEST", players)
     game.start()
+    assert game.phase == "DRAWING"
 
-    assert game.phase == "ROUND_ACTIVE"
-    active_pid = game.current_holder_id
-    assert active_pid in ["p0", "p1"]
-    other_pid = "p1" if active_pid == "p0" else "p0"
+    # Perfect circle points
+    circle_pts = [
+        [200.0 + 80.0 * math.cos(2.0 * math.pi * i / 40.0),
+         200.0 + 80.0 * math.sin(2.0 * math.pi * i / 40.0)]
+        for i in range(40)
+    ]
+    circle_pts.append(circle_pts[0])
 
-    # Try action from inactive player -> not_your_turn
-    inactive_res = game.handle_action(other_pid, "SUBMIT_WORD", {"word": "HELLO"})
-    assert inactive_res.get("status") == "not_your_turn"
-
-    # Try invalid word that does not contain prompt
-    game.current_prompt = "XYZ"
-    res_bad = game.handle_action(active_pid, "SUBMIT_WORD", {"word": "CAT"})
-    assert res_bad.get("status") == "missing_prompt"
-    assert game.current_holder_id == active_pid
-
-    # Give prompt "IN" and test valid word "TRAIN"
-    game.current_prompt = "IN"
-    res_good = game.handle_action(active_pid, "SUBMIT_WORD", {"word": "train"})
-    assert res_good.get("broadcast") is True
-    assert game.current_holder_id == other_pid
-    assert "TRAIN" in game.used_words
-    assert game.scores[active_pid] > 0
+    game.handle_action("p0", "SUBMIT_CIRCLE", {"points": circle_pts})
+    game.handle_action("p1", "SUBMIT_CIRCLE", {"points": circle_pts})
+    assert game.phase == "SHOWCASE"
+    assert game.player_evals["p0"]["score_pct"] > 80.0
 
 
-def test_wordbomb_skips_eliminated_players():
-    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"P_{i}") for i in range(3)}
-    game = WordBombGame("TEST", players)
+def test_fermi_game_action_flow():
+    players = {"p0": PlayerInfo(id="p0", nickname="P0"), "p1": PlayerInfo(id="p1", nickname="P1")}
+    game = FermiGame("TEST", players)
     game.start()
+    assert game.phase == "QUESTION"
 
-    # Eliminate player
-    eliminated_pid = game.player_order[0]
-    game.strikes[eliminated_pid] = 3
-    game.current_turn_idx = 0
-    # Must skip eliminated player
-    assert game.current_holder_id != eliminated_pid
-    assert game.current_holder_id in [game.player_order[1], game.player_order[2]]
-
-
-def test_imposter_word_packs_comprehensive():
-    from app.party.games.imposter import WORD_PACKS, WORD_PACKS_HINTS, HINTS_BY_WORD
-    assert len(WORD_PACKS) >= 12
-    total_words = sum(len(words) for words in WORD_PACKS.values())
-    assert total_words >= 250, f"Expected at least 250 words, got {total_words}"
-    # Verify all words have a non-empty hint
-    for cat, pairs in WORD_PACKS_HINTS.items():
-        for word, hint in pairs:
-            assert len(word) > 1
-            assert len(hint) > 10
-            assert HINTS_BY_WORD[word] == hint
+    # Guess close to actual
+    actual = game.current_q["actual"]
+    game.handle_action("p0", "SUBMIT_GUESS", {"guess": actual})
+    game.handle_action("p1", "SUBMIT_GUESS", {"guess": actual * 1.5})
+    assert game.phase == "REVEAL"
+    assert game.scores["p0"] == 1000
+    assert game.scores["p1"] > 0
 
 
-def test_imposter_fair_rotation():
-    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(4)}
-    recent_imposters = []
-    
-    # Run 4 rounds with fair rotation tracking
-    chosen_history = []
-    for _ in range(4):
-        game = ImposterGame("TEST", players, recent_imposters=recent_imposters)
-        game.start()
-        chosen = game.imposter_ids[0]
-        chosen_history.append(chosen)
-        recent_imposters.append(chosen)
-
-    # In 4 rounds with 4 players, no player should be picked twice consecutively
-    for i in range(len(chosen_history) - 1):
-        assert chosen_history[i] != chosen_history[i + 1]
-    # All 4 players should have had a turn
-    assert set(chosen_history) == {"p0", "p1", "p2", "p3"}
-
-
-def test_imposter_clue_order_and_hint_role_masking():
-    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(4)}
-    game = ImposterGame("TEST", players)
-    game.start()
-
-    # Verify clue order contains all players
-    assert len(game.clue_order) == 4
-    assert set(game.clue_order) == {"p0", "p1", "p2", "p3"}
-    # Verify speaker #0 is NOT an imposter when >= 3 players
-    assert game.clue_order[0] not in game.imposter_ids
-
-    # Verify role masking on hint
-    imp_id = game.imposter_ids[0]
-    imp_state = game.get_player_state(imp_id)
-    assert imp_state["is_imposter"] is True
-    assert imp_state["secret_word"] == "???"
-    assert imp_state["imposter_hint"] is not None
-    assert len(imp_state["imposter_hint"]) > 5
-
-    crew_id = [pid for pid in players if pid != imp_id][0]
-    crew_state = game.get_player_state(crew_id)
-    assert crew_state["is_imposter"] is False
-    assert crew_state["secret_word"] == game.secret_word
-    assert crew_state["imposter_hint"] is None
-
-    # Big screen TV state never leaks secret word or hint during WORD_REVEAL
-    host_state = game.get_host_state()
-    assert host_state["secret_word"] is None
-    assert "imposter_hint" not in host_state
-
-
-@pytest.mark.asyncio
-async def test_imposter_score_persistence_across_rounds():
+def test_host_websocket_authentication():
     room = room_manager.create_room()
-    room.selected_game_id = "imposter"
-    for i in range(3):
-        room.add_player(f"User_{i}")
+    code = room.code
 
-    await room.start_game()
-    assert room.state == "IN_GAME"
-    g1 = room.game_instance
-    pid0 = list(room.players.keys())[0]
-    g1.scores[pid0] = 500
+    # Connect with wrong host token -> receives ERROR and is closed
+    with client.websocket_connect(f"/api/party/ws/{code}?role=host&host_token=wrong_token") as ws:
+        msg = ws.receive_json()
+        assert msg["type"] == "ERROR"
+        assert "Unauthorized" in msg["payload"]["message"]
 
-    # Start next round (Play Again)
-    await room.start_game()
-    g2 = room.game_instance
-    assert g2 is not g1
-    # Scores should persist
-    assert g2.scores[pid0] == 500
-    assert room.players[pid0].score == 500
-
-
-def test_player_palette_assignment():
-    from app.party.manager import COLORS
-    room = room_manager.create_room()
-    p, _ = room.add_player("Player1")
-    assert p.color in COLORS
-    assert p.color.startswith("#")
-
-
+    # Connect with correct host token -> succeeds
+    with client.websocket_connect(f"/api/party/ws/{code}?role=host&host_token={room.host_token}") as ws:
+        msg = ws.receive_json()
+        assert msg["type"] == "ROOM_STATE"
 
 

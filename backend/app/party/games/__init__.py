@@ -1,23 +1,25 @@
-"""Party Games Registry."""
+"""Party Games Registry - Exactly 8 curated modern couch co-op games."""
 from typing import Dict, Type, List, Any
 from app.party.games.base import BasePartyGame
 from app.party.games.mafia import MafiaGame
 from app.party.games.imposter import ImposterGame
-from app.party.games.witclash import WitClashGame
-from app.party.games.trivia import TriviaGame
-from app.party.games.doodledash import DoodleDashGame
-from app.party.games.mostlikely import MostLikelyGame
-from app.party.games.wordbomb import WordBombGame
+from app.party.games.dialed import DialedGame
+from app.party.games.fermi import FermiGame
+from app.party.games.auction import AuctionGame
+from app.party.games.circle import CircleGame
+from app.party.games.trolley import TrolleyGame
+from app.party.games.trends import TrendsGame
 from app.party.protocol import PlayerInfo
 
 GAME_CLASSES: Dict[str, Type[BasePartyGame]] = {
     MafiaGame.id: MafiaGame,
     ImposterGame.id: ImposterGame,
-    WitClashGame.id: WitClashGame,
-    TriviaGame.id: TriviaGame,
-    DoodleDashGame.id: DoodleDashGame,
-    MostLikelyGame.id: MostLikelyGame,
-    WordBombGame.id: WordBombGame,
+    DialedGame.id: DialedGame,
+    FermiGame.id: FermiGame,
+    AuctionGame.id: AuctionGame,
+    CircleGame.id: CircleGame,
+    TrolleyGame.id: TrolleyGame,
+    TrendsGame.id: TrendsGame,
 }
 
 

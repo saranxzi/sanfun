@@ -17,7 +17,7 @@ export class HostGameView {
 
     public updateState(state: HostGameState) {
         if (state.phase !== this.lastPhase) {
-            this.handlePhaseTransition(state.phase);
+            this.handlePhaseTransition(state.phase, state);
             this.lastPhase = state.phase;
             this.maxPhaseDuration = state.phase_timer > 0 ? state.phase_timer : 15;
             this.startLocalTimer();
@@ -35,37 +35,8 @@ export class HostGameView {
         }
     }
 
-    public handleGameEvent(event: { event: string; [key: string]: any }) {
-        if (event.event === "STROKE" && event.stroke) {
-            this.appendHostStroke(event.stroke);
-        } else if (event.event === "CLEAR") {
-            const canvas = this.container.querySelector("#host-doodle-canvas") as HTMLCanvasElement;
-            if (canvas) {
-                const ctx = canvas.getContext("2d");
-                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-            }
-        }
-    }
-
-    private appendHostStroke(s: any) {
-        const canvas = this.container.querySelector("#host-doodle-canvas") as HTMLCanvasElement;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = "#1e293b";
-        const scaleX = canvas.width / 320;
-        const scaleY = canvas.height / 280;
-
-        if (s.type === "start") {
-            ctx.beginPath();
-            ctx.moveTo(s.x * scaleX, s.y * scaleY);
-        } else if (s.type === "move") {
-            ctx.lineTo(s.x * scaleX, s.y * scaleY);
-            ctx.stroke();
-        }
+    public handleGameEvent(_event: { event: string; [key: string]: any }) {
+        // Reserved for audio-visual cues
     }
 
     private startLocalTimer() {
@@ -89,12 +60,15 @@ export class HostGameView {
         }
     }
 
-    private handlePhaseTransition(newPhase: string) {
-        if (newPhase === "DAY_DAWN" || newPhase === "DAY_EXECUTION") soundManager.playGong();
-        else if (newPhase === "SHOWDOWN_REVEAL" || newPhase === "REVEAL") soundManager.playDing();
+    private handlePhaseTransition(newPhase: string, state: HostGameState) {
+        if (newPhase === "DAY_DAWN" || newPhase === "DAY_EXECUTION" || newPhase === "HAMMER") soundManager.playGong();
+        else if (newPhase === "REVEAL" || newPhase === "SHOWCASE") soundManager.playDing();
         else if (newPhase === "GAME_OVER") soundManager.playVictory();
-        else if (newPhase === "EXPLOSION") soundManager.playBuzzer();
-        else soundManager.playTone(400, 0.1, "sine");
+        else if (state.game_id === "dialed" && newPhase === "INSPECT" && state.round_type === "PITCH" && state.target_pitch) {
+            soundManager.playTone(state.target_pitch.freq, 2.5);
+        } else {
+            soundManager.playTone(400, 0.1, "sine");
+        }
     }
 
     public render() {
@@ -104,11 +78,12 @@ export class HostGameView {
         switch (this.state.game_id) {
             case "mafia": content = this.renderMafia(); break;
             case "imposter": content = this.renderImposter(); break;
-            case "witclash": content = this.renderWitClash(); break;
-            case "trivia": content = this.renderTrivia(); break;
-            case "doodledash": content = this.renderDoodleDash(); break;
-            case "mostlikely": content = this.renderMostLikely(); break;
-            case "wordbomb": content = this.renderWordBomb(); break;
+            case "dialed": content = this.renderDialed(); break;
+            case "fermi": content = this.renderFermi(); break;
+            case "auction": content = this.renderAuction(); break;
+            case "circle": content = this.renderCircle(); break;
+            case "trolley": content = this.renderTrolley(); break;
+            case "trends": content = this.renderTrends(); break;
             default: content = `<div>Unknown Game: ${this.state.game_id}</div>`;
         }
 
@@ -141,8 +116,6 @@ export class HostGameView {
         this.container.querySelector("#btn-gameover-lobby")?.addEventListener("click", () => {
             this.socket.send("BACK_TO_LOBBY");
         });
-
-        if (this.state.game_id === "doodledash") this.drawHostCanvasStrokes();
     }
 
     private renderGameOverActions(): string {
@@ -174,404 +147,385 @@ export class HostGameView {
         `;
     }
 
-    private drawHostCanvasStrokes() {
-        const canvas = this.container.querySelector("#host-doodle-canvas") as HTMLCanvasElement;
-        const strokes = (this.state as any)?.strokes;
-        if (!canvas || !strokes) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = "#1e293b";
-
-        const scaleX = canvas.width / 320;
-        const scaleY = canvas.height / 280;
-        let drawing = false;
-
-        for (const s of strokes) {
-            if (s.type === "start") {
-                ctx.beginPath();
-                ctx.moveTo(s.x * scaleX, s.y * scaleY);
-                drawing = true;
-            } else if (s.type === "move" && drawing) {
-                ctx.lineTo(s.x * scaleX, s.y * scaleY);
-                ctx.stroke();
-            } else if (s.type === "end") {
-                drawing = false;
-            }
-        }
-    }
-
-    private renderMafia(): string {
-        const s = this.state!;
-        if (s.phase === "ROLE_REVEAL") {
-            return `
-                <div class="phase-card">
-                    <h2>SECRET ROLES ASSIGNED</h2>
-                    <p class="phase-instruction">Check your phone screen in secret! Don't let anyone see your role.</p>
-                </div>
-            `;
-        } else if (s.phase === "NIGHT_ACTIONS") {
-            return `
-                <div class="phase-card night-card">
-                    <div class="moon-icon">🌙</div>
-                    <h2>NIGHT HAS FALLEN</h2>
-                    <p class="phase-instruction">Villagers sleep. Mafia, Doctor, and Detective are making nocturnal moves.</p>
-                    <div class="alive-roster">
-                        ${s.players.map((p: any) => `
-                            <div class="player-in-game ${p.is_alive ? "" : "rip"}">${p.avatar} ${p.nickname}</div>
-                        `).join("")}
-                    </div>
-                </div>
-            `;
-        } else if (s.phase === "DAY_DAWN") {
-            const verdict = s.doctor_saved
-                ? `<div class="verdict-banner saved">A MIRACLE OCCURRED! The Doctor saved the victim!</div>`
-                : (s.last_killed_name ? `<div class="verdict-banner killed">${s.last_killed_name} WAS ELIMINATED! (${s.last_killed_role})</div>` : `<p>A peaceful night. No casualties.</p>`);
-            return `
-                <div class="phase-card dawn-card">
-                    <div class="sun-icon">☀️</div>
-                    <h2>THE SUN RISES</h2>
-                    ${verdict}
-                </div>
-            `;
-        } else if (s.phase === "DAY_DISCUSS") {
-            return `
-                <div class="phase-card discuss-card">
-                    <div class="gavel-icon">🗣️</div>
-                    <h2>TOWN SQUARE DEBATE</h2>
-                    <p class="phase-instruction">Debate clues, expose alibis, and deduce who the Mafia syndicate is!</p>
-                    <div class="alive-roster">
-                        ${s.players.map((p: any) => `
-                            <div class="player-in-game ${p.is_alive ? "" : "rip"}">${p.avatar} ${p.nickname}</div>
-                        `).join("")}
-                    </div>
-                </div>
-            `;
-        } else if (s.phase === "DAY_VOTE") {
-            return `
-                <div class="phase-card vote-card">
-                    <div class="gavel-icon">⚖️</div>
-                    <h2>TOWN COUNCIL VOTE</h2>
-                    <p class="phase-instruction">Cast your votes on your phones!</p>
-                    <p class="vote-progress">${s.votes_cast_count || 0} / ${s.alive_count} votes cast</p>
-                </div>
-            `;
-        } else if (s.phase === "DAY_EXECUTION") {
-            return `
-                <div class="phase-card execution-card">
-                    <h2>THE TOWN HAS SPOKEN!</h2>
-                    ${s.last_killed_name ? `
-                        <div class="verdict-banner killed">${s.last_killed_name} HAS BEEN EXECUTED! (${s.last_killed_role})</div>
-                    ` : `<div class="verdict-banner saved">NO CONSENSUS REACHED. No execution today.</div>`}
-                </div>
-            `;
-        } else if (s.phase === "GAME_OVER") {
-            return `
-                <div class="phase-card gameover-card">
-                    <h1>${s.winner === "MAFIA" ? "🕵️ MAFIA WINS!" : "🎉 TOWN WINS!"}</h1>
-                    <div class="role-summary-table">
-                        ${s.players.map((p: any) => `
-                            <div class="summary-row">${p.avatar} ${p.nickname} <span class="role-tag">${p.role_revealed || "VILLAGER"}</span> (+${p.score} pts)</div>
-                        `).join("")}
-                    </div>
-                    ${this.renderGameOverActions()}
-                </div>
-            `;
-        }
-        return `<div>Mafia Phase: ${s.phase}</div>`;
-    }
-
-    private renderImposter(): string {
-        const s = this.state!;
-        if (s.phase === "WORD_REVEAL") {
-            return `
-                <div class="phase-card">
-                    <div class="chameleon-icon">🦎</div>
-                    <h2>FIND THE IMPOSTER</h2>
-                    <div class="category-banner">CATEGORY: ${s.category}</div>
-                    <p class="phase-instruction">Everyone knows the secret word... except the Imposter!</p>
-                </div>
-            `;
-        } else if (s.phase === "CLUE_ROUNDS") {
-            return `
-                <div class="phase-card">
-                    <div class="category-banner">CATEGORY: ${s.category}</div>
-                    <h2>ONE-WORD CLUES</h2>
-                    <p class="phase-instruction">Give a subtle clue that proves you know the word without revealing it to the Imposter!</p>
-                    <div class="clue-speaker-order">
-                        ${(s.clue_order || []).map((name: string, i: number) => `
-                            <div class="speaker-step"><span class="step-num">#${i + 1}</span> ${name}</div>
-                        `).join(" ➔ ")}
-                    </div>
-                </div>
-            `;
-        } else if (s.phase === "VOTING") {
-            return `
-                <div class="phase-card">
-                    <h2>VOTE OUT THE IMPOSTER!</h2>
-                    <p class="phase-instruction">Who gave a suspicious or vague clue? Cast your vote on your phone!</p>
-                </div>
-            `;
-        } else if (s.phase === "IMPOSTER_GUESS") {
-            return `
-                <div class="phase-card">
-                    <h2>CLUTCH GUESS!</h2>
-                    <p class="phase-instruction"><strong>${s.voted_out_name}</strong> was caught! Can they guess the secret word for the steal?</p>
-                </div>
-            `;
-        } else if (s.phase === "GAME_OVER") {
-            return `
-                <div class="phase-card gameover-card">
-                    <h1>${s.winner === "IMPOSTER" ? "🦎 IMPOSTER WINS!" : "🛡️ CREW WINS!"}</h1>
-                    <div class="secret-word-card">
-                        <span>THE SECRET WORD WAS:</span>
-                        <div class="secret-word-highlight">${s.secret_word}</div>
-                    </div>
-                    <div class="role-summary-table">
-                        ${s.players.map((p: any) => `
-                            <div class="summary-row">${p.avatar} ${p.nickname} <span class="role-tag">${p.is_imposter ? "IMPOSTER" : "CREW"}</span> (+${p.score} pts)</div>
-                        `).join("")}
-                    </div>
-                    ${this.renderGameOverActions()}
-                </div>
-            `;
-        }
-        return `<div>Imposter Phase: ${s.phase}</div>`;
-    }
-
-    private renderWitClash(): string {
-        const s = this.state!;
-        if (s.phase === "PROMPT_INPUT") {
-            return `
-                <div class="phase-card">
-                    <h2>ROUND ${s.round_number} / ${s.max_rounds}</h2>
-                    <h1>WRITE YOUR PUNCHLINES!</h1>
-                    <p class="phase-instruction">Check your phone to answer 2 hilarious prompts before the timer runs out.</p>
-                </div>
-            `;
-        } else if (s.phase === "SHOWDOWN_VOTE" || s.phase === "SHOWDOWN_REVEAL") {
-            const m = s.current_matchup;
-            if (!m) return `<div>Preparing showdown...</div>`;
-            return `
-                <div class="witclash-showdown">
-                    <div class="matchup-prompt">"${m.prompt}"</div>
-                    <div class="answers-battle">
-                        <div class="answer-card card-blue">
-                            <div class="ans-text">"${m.answer_1}"</div>
-                            ${s.phase === "SHOWDOWN_REVEAL" ? `<div class="ans-author">— ${m.author_1}</div><div class="ans-votes">${m.votes_1} Votes</div>` : ""}
-                        </div>
-                        <div class="vs-badge">VS</div>
-                        <div class="answer-card card-magenta">
-                            <div class="ans-text">"${m.answer_2}"</div>
-                            ${s.phase === "SHOWDOWN_REVEAL" ? `<div class="ans-author">— ${m.author_2}</div><div class="ans-votes">${m.votes_2} Votes</div>` : ""}
-                        </div>
-                    </div>
-                    ${s.phase === "SHOWDOWN_REVEAL" && m.is_sweep ? `<div class="double-witclash-banner">💥 DOUBLE WITCLASH! 100% SWEEP! 💥</div>` : ""}
-                </div>
-            `;
-        } else if (s.phase === "GAME_OVER") {
-            return this.renderPodium("👑 WITCLASH CHAMPIONS 👑");
-        }
-        return `<div>WitClash Phase: ${s.phase}</div>`;
-    }
-
-    private renderTrivia(): string {
-        const s = this.state!;
-        const glyphs = ["▲", "◆", "●", "■"];
-
-        if (s.phase === "QUESTION" || s.phase === "REVEAL") {
-            return `
-                <div class="trivia-host-screen">
-                    <div class="q-progress">QUESTION ${s.question_index} OF ${s.total_questions}</div>
-                    <div class="q-text">${s.question}</div>
-                    <div class="options-grid">
-                        ${(s.options || []).map((opt: string, i: number) => `
-                            <div class="opt-card opt-${i} ${s.phase === "REVEAL" && i === s.correct_option ? "correct-card" : ""}">
-                                <span class="shape">${glyphs[i]}</span>
-                                <span class="text">${opt}</span>
-                                ${s.phase === "REVEAL" && s.option_stats ? `<span class="stat-count">${s.option_stats[i]}</span>` : ""}
-                            </div>
-                        `).join("")}
-                    </div>
-                    <div class="trivia-host-roster">
-                        ${(s.players || []).map((p: any) => `
-                            <div class="trivia-player-chip ${p.answered ? "badge-done" : ""}">
-                                <span>${p.avatar} ${p.nickname}</span>
-                                <span class="score-now">${p.score || 0}</span>
-                                ${p.streak > 1 ? `<span class="streak-text">🔥x${p.streak}</span>` : ""}
-                            </div>
-                        `).join("")}
-                    </div>
-                </div>
-            `;
-        } else if (s.phase === "GAME_OVER") {
-            return this.renderPodium("⚡ TRIVIA BLITZ PODIUM ⚡");
-        }
-        return `<div>Trivia Phase: ${s.phase}</div>`;
-    }
-
-    private renderDoodleDash(): string {
-        const s = this.state!;
-        if (s.phase === "GAME_OVER") return this.renderPodium("🎨 DOODLEDASH ARTISTS 🎨");
-
+    private renderSubmittedChips(submittedPids: string[] = []): string {
+        const players = this.state?.players || [];
         return `
-            <div class="doodle-host-screen">
-                <div class="doodle-main-area">
-                    <div class="drawer-indicator">🎨 Drawer: <strong>${s.drawer_name}</strong></div>
-                    <div class="word-blanks">${s.secret_word}</div>
-                    <canvas id="host-doodle-canvas" width="600" height="400" class="doodle-canvas"></canvas>
-                </div>
-                <div class="live-guesses-box">
-                    <div class="section-title" style="padding: 0.8rem 1rem 0;">LIVE GUESSES</div>
-                    <div class="guess-stream">
-                        ${(s.guesses || []).map((g: any) => `
-                            <div class="guess-bubble ${g.is_correct ? "correct" : ""}">
-                                <strong>${g.player_name}:</strong> ${g.text}
-                            </div>
-                        `).join("")}
-                    </div>
-                </div>
+            <div class="submitted-chips-bar">
+                ${players.map((p: any) => {
+                    const done = submittedPids.includes(p.id);
+                    return `
+                        <div class="player-chip ${done ? 'chip-done' : 'chip-waiting'}">
+                            <span>${p.avatar}</span>
+                            <span>${p.nickname}</span>
+                            <span>${done ? '✓' : '...'}</span>
+                        </div>
+                    `;
+                }).join("")}
             </div>
         `;
     }
 
-    private renderMostLikely(): string {
+    // 1. MAFIA
+    private renderMafia(): string {
         const s = this.state!;
-        const promptText = s.question || s.prompt || "Who is most likely to...";
-        if (s.phase === "QUESTION_VOTE" || s.phase === "VOTING") {
-            const votesCast = s.votes_cast_count !== undefined ? s.votes_cast_count : (s.votes_cast || 0);
-            const totalVoters = s.players?.length || s.total_voters || 1;
-            return `
-                <div class="phase-card mostlikely-host-card">
-                    <div class="round-badge">ROUND ${s.round_number || 1} / ${s.max_rounds || 5}</div>
-                    <h2 class="mostlikely-prompt">"${promptText}"</h2>
-                    <p class="phase-instruction">Cast your vote on your phones!</p>
-                    <div class="vote-progress-bar">
-                        <div class="progress-fill" style="width: ${(votesCast / Math.max(1, totalVoters)) * 100}%;"></div>
-                    </div>
-                    <p class="vote-progress">${votesCast} / ${totalVoters} Votes Cast</p>
-                    <div class="candidates-roster">
-                        ${(s.players || []).map((p: any) => `
-                            <div class="candidate-pill">
-                                <span class="c-avatar">${p.avatar}</span>
-                                <span class="c-name">${p.nickname}</span>
-                            </div>
-                        `).join("")}
-                    </div>
+        if (s.phase === "GAME_OVER") return this.renderPodium(`🐺 MAFIA OVER • ${s.winner === "TOWN" ? "VILLAGE TRIUMPH" : "MAFIA TAKEOVER"}`);
+
+        return `
+            <div class="phase-card">
+                <div class="phase-badge">${s.phase.replace("_", " ")}</div>
+                <h2>${s.phase === "NIGHT_ACTIONS" ? "🌙 The Night is Silent..." : (s.phase === "DAY_DEBATE" ? "☀️ Village Assembly" : "⚖️ Voting in Progress")}</h2>
+                <div class="player-roster-grid">
+                    ${(s.players || []).map((p: any) => `
+                        <div class="player-card ${p.is_alive ? '' : 'eliminated'}">
+                            <span class="avatar">${p.avatar}</span>
+                            <span class="name">${p.nickname}</span>
+                            <span class="status">${p.is_alive ? 'Alive' : '💀 Executed'}</span>
+                        </div>
+                    `).join("")}
                 </div>
-            `;
-        } else if (s.phase === "VOTE_REVEAL" || s.phase === "REVEAL") {
-            const topName = s.top_voted_name || (s.winners && s.winners.length ? s.winners.join(", ") : "Everyone");
-            const topAv = s.top_voted_avatar || "👑";
-            return `
-                <div class="phase-card mostlikely-reveal-card">
-                    <div class="round-badge">ROUND ${s.round_number || 1} / ${s.max_rounds || 5}</div>
-                    <h2 class="mostlikely-prompt">"${promptText}"</h2>
-                    <div class="mostlikely-winner-banner">
-                        <span>🏆 MOST LIKELY:</span>
-                        <div class="winner-names">${topAv} ${topName}</div>
-                    </div>
-                    <div class="results-grid">
-                        ${(s.players || []).map((p: any) => {
-                            const count = s.vote_counts ? (s.vote_counts[p.id] || 0) : 0;
-                            const isWin = p.nickname === topName || (s.winners && s.winners.includes(p.nickname));
-                            return `
-                                <div class="result-tile ${isWin ? "is-winner" : ""}">
-                                    <div class="tile-header">
-                                        <span class="r-avatar">${p.avatar}</span>
-                                        <span class="r-name">${p.nickname}</span>
-                                        <span class="r-votes">${count} ${count === 1 ? "vote" : "votes"}</span>
-                                    </div>
-                                    <div class="p-score" style="font-size: 0.8rem; color: #aaa;">Score: ${p.score || 0} pts</div>
-                                </div>
-                            `;
-                        }).join("")}
-                    </div>
-                </div>
-            `;
-        } else if (s.phase === "GAME_OVER") {
-            return this.renderPodium("🥂 MOST LIKELY TO PODIUM 🥂");
-        }
-        return `<div>Most Likely Phase: ${s.phase}</div>`;
+                ${s.history_log ? `<div class="history-log"><p>${s.history_log[s.history_log.length - 1] || ""}</p></div>` : ""}
+            </div>
+        `;
     }
 
-    private renderWordBomb(): string {
+    // 2. IMPOSTER
+    private renderImposter(): string {
         const s = this.state!;
-        const currentPrompt = s.current_prompt || s.prompt || "...";
-        const holderName = s.holder_name || s.active_player_name || "Player";
-        const holderAv = s.holder_avatar || s.active_player_avatar || "👤";
+        if (s.phase === "GAME_OVER") return this.renderPodium(`🕵️ IMPOSTER OVER • ${s.winner} WINS`);
 
-        if (s.phase === "ROUND_ACTIVE" || s.phase === "ROUND") {
-            const fusePct = Math.max(0, Math.min(100, ((s.phase_timer || 0) / 10) * 100));
+        return `
+            <div class="phase-card">
+                <div class="phase-badge">CATEGORY: ${s.category || "General"}</div>
+                <h2>${s.phase === "WORD_REVEAL" ? "Secret Words Revealed on Phones..." : (s.phase === "CLUE_ROUNDS" ? "🗣️ Speak Your Clues in Order" : "🗳️ Vote for the Imposter")}</h2>
+                <div class="clue-speaker-track">
+                    ${(s.clue_order || []).map((pid: string, idx: number) => {
+                        const p = s.players.find((pl: any) => pl.id === pid);
+                        return `
+                            <div class="speaker-pill">
+                                <span class="order">#${idx + 1}</span>
+                                <span>${p?.avatar || "👤"}</span>
+                                <span>${p?.nickname || pid}</span>
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+                ${this.renderSubmittedChips(s.submitted_pids || [])}
+            </div>
+        `;
+    }
+
+    // 3. DIALED
+    private renderDialed(): string {
+        const s = this.state!;
+        if (s.phase === "GAME_OVER") return this.renderPodium(`🎯 DIALED CHAMPIONS`);
+
+        if (s.phase === "INSPECT") {
+            const isColor = s.round_type === "COLOR";
+            const col = s.target_color || {};
             return `
-                <div class="phase-card wordbomb-host-card">
-                    <div class="round-badge">ROUND ${s.round_number || 1} / ${s.max_rounds || 3}</div>
-                    <div class="wordbomb-bomb-wrap">
-                        <div class="bomb-emoji ${fusePct < 30 ? "urgent" : ""}">💣</div>
-                        <div class="wordbomb-prompt-display">
-                            <span class="prompt-hint">MUST CONTAIN:</span>
-                            <div class="prompt-letters">${currentPrompt}</div>
-                        </div>
-                    </div>
-                    <div class="bomb-holder-banner">
-                        <span class="holder-av">${holderAv}</span>
-                        <span class="holder-name">${holderName}</span>
-                        <span class="holder-badge">HAS THE BOMB!</span>
-                    </div>
-                    ${s.last_word ? `
-                        <div class="last-word-pill">
-                            Defused with: <strong>${s.last_word}</strong>!
-                        </div>
-                    ` : ""}
-                    <div class="wordbomb-roster">
+                <div class="phase-card">
+                    <div class="phase-badge">ROUND ${s.round_number || 1} • ${s.round_type} RECALL</div>
+                    <h2>${isColor ? `Memorize: ${col.name || 'Target Color'}` : `Listen Closely: ${s.target_pitch?.name || 'Target Tone'}`}</h2>
+                    ${isColor ? `
+                        <div class="target-swatch" style="background: hsl(${col.h}, ${col.s * 100}%, ${col.v * 50}%); width: 200px; height: 200px; border-radius: 24px; margin: 1.5rem auto; box-shadow: 0 12px 40px rgba(0,0,0,0.5); border: 3px solid rgba(255,255,255,0.2);"></div>
+                    ` : `
+                        <div class="target-tone-card" style="margin: 2rem auto; font-size: 3rem;">🎵</div>
+                    `}
+                    <p style="color: var(--text-dim);">Lock this memory in. Phone screens will open when timer reaches zero.</p>
+                </div>
+            `;
+        } else if (s.phase === "DIAL") {
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">DIALING IN PROGRESS</div>
+                    <h2>Tune Your Phones to the Exact ${s.round_type === "COLOR" ? "Color Hue" : "Audio Pitch"}</h2>
+                    <p style="color: var(--text-dim); margin-bottom: 2rem;">Closest precision wins maximum points!</p>
+                    ${this.renderSubmittedChips(s.submitted_pids || [])}
+                </div>
+            `;
+        } else {
+            // REVEAL
+            const results = s.round_results || {};
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">ACCURACY REVEAL</div>
+                    <h2>Precision Results</h2>
+                    <div class="dial-reveal-grid">
                         ${(s.players || []).map((p: any) => {
-                            const strikes = p.strikes || 0;
-                            const lives = Math.max(0, 3 - strikes);
-                            const isAlive = lives > 0;
-                            const isActive = p.is_holding_bomb || p.id === s.holder_id;
+                            const r = results[p.id];
                             return `
-                                <div class="wordbomb-player-tile ${!isAlive ? "eliminated" : ""} ${isActive ? "active-holder" : ""}">
-                                    <div class="p-info">${p.avatar} ${p.nickname}</div>
-                                    <div class="p-lives">${isAlive ? "❤️".repeat(lives) : "💀 OUT"}</div>
-                                    <div class="p-score">${p.score || 0} pts</div>
+                                <div class="dial-result-card">
+                                    <div class="user-row"><span>${p.avatar}</span> <strong>${p.nickname}</strong></div>
+                                    <div class="score-row">${r ? `${r.score_pct}% Precision` : 'No Entry'}</div>
+                                    <div class="pts-row">+${r ? r.points_awarded : 0} pts</div>
                                 </div>
                             `;
                         }).join("")}
                     </div>
                 </div>
             `;
-        } else if (s.phase === "EXPLOSION") {
-            const explodedName = s.last_exploded_player || s.exploded_player_name || "A player";
-            return `
-                <div class="phase-card wordbomb-explosion-card">
-                    <div class="explosion-icon">💥</div>
-                    <h1 class="explosion-heading">BOOOOOOM!</h1>
-                    <div class="exploded-player-banner">
-                        <span class="ex-name">${explodedName}</span>
-                        <span class="ex-sub">ran out of time and lost a life!</span>
-                    </div>
-                    <div class="wordbomb-roster" style="margin-top: 2rem;">
-                        ${(s.players || []).map((p: any) => {
-                            const strikes = p.strikes || 0;
-                            const lives = Math.max(0, 3 - strikes);
-                            const isAlive = lives > 0;
-                            return `
-                                <div class="wordbomb-player-tile ${!isAlive ? "eliminated" : ""}">
-                                    <div class="p-info">${p.avatar} ${p.nickname}</div>
-                                    <div class="p-lives">${isAlive ? "❤️".repeat(lives) : "💀 OUT"}</div>
-                                </div>
-                            `;
-                        }).join("")}
-                    </div>
-                </div>
-            `;
-        } else if (s.phase === "GAME_OVER") {
-            return this.renderPodium("💣 WORD BOMB SURVIVORS 💣");
         }
-        return `<div>Word Bomb Phase: ${s.phase}</div>`;
+    }
+
+    // 4. FERMI ESTIMATOR
+    private renderFermi(): string {
+        const s = this.state!;
+        if (s.phase === "GAME_OVER") return this.renderPodium(`🪐 FERMI ESTIMATOR CHAMPIONS`);
+
+        if (s.phase === "QUESTION") {
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">ORDER OF MAGNITUDE ESTIMATE</div>
+                    <h1 class="fermi-prompt">${s.prompt || ""}</h1>
+                    <div class="fermi-unit">Measured in: <strong>${s.unit || "units"}</strong></div>
+                    <p style="color: var(--text-dim); margin: 1.5rem 0;">Submit your numerical estimate on your phone.</p>
+                    ${this.renderSubmittedChips(s.submitted_pids || [])}
+                </div>
+            `;
+        } else {
+            // REVEAL
+            const results = s.round_results || {};
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">ACTUAL VALUE REVEAL</div>
+                    <div class="actual-value-box">
+                        <span class="actual-num">${typeof s.actual === "number" ? s.actual.toLocaleString() : s.actual}</span>
+                        <span class="actual-unit">${s.unit || ""}</span>
+                    </div>
+                    <p class="fact-box">💡 ${s.fact || ""}</p>
+                    <div class="fermi-results-list">
+                        ${(s.players || []).map((p: any) => {
+                            const r = results[p.id];
+                            return `
+                                <div class="fermi-res-item">
+                                    <span class="av">${p.avatar} ${p.nickname}</span>
+                                    <span class="guess">Guess: ${r ? (typeof r.guess === "number" ? r.guess.toLocaleString() : r.guess) : 0}</span>
+                                    <span class="diff">${r ? `±${r.d_log} orders` : 'Missed'}</span>
+                                    <span class="pts">+${r ? r.points : 0} pts</span>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    // 5. AUCTION
+    private renderAuction(): string {
+        const s = this.state!;
+        if (s.phase === "GAME_OVER") return this.renderPodium(`🏛️ AUCTION HOUSE CHAMPIONS`);
+
+        if (s.phase === "CATALOG" || s.phase === "BIDDING") {
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">LOT CATALOG • ${s.item_category || "Fine Art"}</div>
+                    <div class="lot-icon" style="font-size: 4rem; margin: 1rem 0;">${s.item_icon || "🏺"}</div>
+                    <h1>${s.item_title || "Rare Collectible"}</h1>
+                    <p class="lot-desc" style="max-width: 650px; margin: 0.5rem auto 1.5rem; color: var(--text-dim);">${s.item_description || ""}</p>
+                    <div class="auction-rule-banner">🔨 Closest secret bid without going over the hammer price wins the lot!</div>
+                    ${this.renderSubmittedChips(s.submitted_pids || [])}
+                </div>
+            `;
+        } else {
+            // HAMMER
+            const results = s.round_results || {};
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">HAMMER PRICE REVEAL</div>
+                    <div class="hammer-banner">
+                        <span class="gavel">🔨</span>
+                        <span class="price">$${typeof s.hammer_price === "number" ? s.hammer_price.toLocaleString() : s.hammer_price}</span>
+                    </div>
+                    <p class="fact-box">🏛️ ${s.fact || ""}</p>
+                    <div class="bids-grid">
+                        ${(s.players || []).map((p: any) => {
+                            const r = results[p.id];
+                            const won = r?.won_lot;
+                            const over = r?.went_over;
+                            return `
+                                <div class="bid-card ${won ? 'won' : (over ? 'over' : '')}">
+                                    <div class="bid-user">${p.avatar} ${p.nickname}</div>
+                                    <div class="bid-val">$${r?.bid ? r.bid.toLocaleString() : 0}</div>
+                                    <div class="bid-status">${won ? '🏆 WON LOT' : (over ? '❌ WENT OVER' : 'Under')}</div>
+                                    <div class="bid-pts">+${r?.points || 0} pts</div>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    // 6. CIRCLE
+    private renderCircle(): string {
+        const s = this.state!;
+        if (s.phase === "GAME_OVER") return this.renderPodium(`⭕ CIRCLE PERFECTION CHAMPIONS`);
+
+        if (s.phase === "DRAWING") {
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">FREEHAND DRAWING</div>
+                    <h1>Draw a Perfect Circle on Your Phone</h1>
+                    <div class="guide-circle-demo">
+                        <div class="dashed-circle"></div>
+                    </div>
+                    <p style="color: var(--text-dim); margin-top: 1rem;">Single continuous closed stroke. Pratt mathematical fit evaluating roundness.</p>
+                    ${this.renderSubmittedChips(s.submitted_pids || [])}
+                </div>
+            `;
+        } else {
+            // SHOWCASE
+            const evals = s.evals || {};
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">MATHEMATICAL CIRCULARITY</div>
+                    <h1>Circle Precision Scores</h1>
+                    <div class="circle-eval-grid">
+                        ${(s.players || []).map((p: any) => {
+                            const e = evals[p.id];
+                            return `
+                                <div class="circle-card">
+                                    <div class="user-row">${p.avatar} <strong>${p.nickname}</strong></div>
+                                    <div class="circle-score">${e ? `${e.score_pct}%` : '0%'}</div>
+                                    <div class="circle-metrics">
+                                        <span>Coverage: ${e?.metrics?.angular_coverage_pct || 0}%</span>
+                                    </div>
+                                    <div class="circle-pts">+${e?.points || 0} pts</div>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    // 7. TROLLEY
+    private renderTrolley(): string {
+        const s = this.state!;
+        if (s.phase === "GAME_OVER") return this.renderPodium(`🚋 ABSURD DILEMMAS CHAMPIONS`);
+
+        if (s.phase === "CHOICE") {
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">THE DILEMMA</div>
+                    <h1>${s.dilemma_title || "Choose Your Fate"}</h1>
+                    <div class="dilemma-cards-container">
+                        <div class="dilemma-split-card side-a">
+                            <span class="icon">${s.icon_a || "🅰️"}</span>
+                            <h3>OPTION A</h3>
+                            <p>${s.option_a || ""}</p>
+                        </div>
+                        <div class="split-vs">VS</div>
+                        <div class="dilemma-split-card side-b">
+                            <span class="icon">${s.icon_b || "🅱️"}</span>
+                            <h3>OPTION B</h3>
+                            <p>${s.option_b || ""}</p>
+                        </div>
+                    </div>
+                    ${this.renderSubmittedChips(s.submitted_pids || [])}
+                </div>
+            `;
+        } else {
+            // REVEAL
+            const a = s.tally?.A || 0;
+            const b = s.tally?.B || 0;
+            const total = Math.max(1, a + b);
+            const aPct = Math.round((a / total) * 100);
+            const bPct = Math.round((b / total) * 100);
+            const res = s.round_results || {};
+
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">ROOM CONSENSUS REVEAL</div>
+                    <h1>${s.majority_choice === "TIE" ? "⚡ CHAOS! EXACT 50-50 TIE!" : `Majority Picked OPTION ${s.majority_choice}`}</h1>
+                    <div class="consensus-meter">
+                        <div class="meter-a" style="width: ${aPct}%;">Option A: ${aPct}% (${a})</div>
+                        <div class="meter-b" style="width: ${bPct}%;">Option B: ${bPct}% (${b})</div>
+                    </div>
+                    <div class="trolley-results-list">
+                        ${(s.players || []).map((p: any) => {
+                            const r = res[p.id];
+                            return `
+                                <div class="trolley-res-pill">
+                                    <span>${p.avatar} ${p.nickname}</span>
+                                    <span>Picked ${r?.choice || 'None'}</span>
+                                    <span>${r?.predicted_correctly ? '🎯 Bet Correct' : '❌ Bet Missed'}</span>
+                                    <span>+${r?.points || 0} pts</span>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    // 8. TRENDS
+    private renderTrends(): string {
+        const s = this.state!;
+        if (s.phase === "GAME_OVER") return this.renderPodium(`📈 HIGHER OR LOWER CHAMPIONS`);
+
+        const a = s.item_a || {};
+        const b = s.item_b || {};
+
+        if (s.phase === "GUESS") {
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">SEARCH VOLUME BATTLE</div>
+                    <h1>Higher or Lower?</h1>
+                    <div class="trends-arena">
+                        <div class="trend-item known">
+                            <span class="icon">${a.icon || "📦"}</span>
+                            <h2>${a.name || ""}</h2>
+                            <div class="vol">${typeof a.volume === "number" ? a.volume.toLocaleString() : a.volume} searches/mo</div>
+                        </div>
+                        <div class="trends-vs">VS</div>
+                        <div class="trend-item unknown">
+                            <span class="icon">${b.icon || "❓"}</span>
+                            <h2>${b.name || ""}</h2>
+                            <div class="vol mystery">??? searches/mo</div>
+                        </div>
+                    </div>
+                    ${this.renderSubmittedChips(s.submitted_pids || [])}
+                </div>
+            `;
+        } else {
+            // REVEAL
+            const results = s.round_results || {};
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">TRENDS REVEAL</div>
+                    <div class="trends-arena">
+                        <div class="trend-item known">
+                            <span class="icon">${a.icon || "📦"}</span>
+                            <h2>${a.name || ""}</h2>
+                            <div class="vol">${typeof a.volume === "number" ? a.volume.toLocaleString() : a.volume} / mo</div>
+                        </div>
+                        <div class="trends-vs">${s.relation === "HIGHER" ? '▲ HIGHER' : '▼ LOWER'}</div>
+                        <div class="trend-item known highlight">
+                            <span class="icon">${b.icon || "📦"}</span>
+                            <h2>${b.name || ""}</h2>
+                            <div class="vol">${typeof b.volume === "number" ? b.volume.toLocaleString() : b.volume} / mo</div>
+                        </div>
+                    </div>
+                    <div class="trends-results-list">
+                        ${(s.players || []).map((p: any) => {
+                            const r = results[p.id];
+                            return `
+                                <div class="trend-res-row">
+                                    <span>${p.avatar} ${p.nickname}</span>
+                                    <span>Guessed ${r?.guess || 'None'}</span>
+                                    <span>${r?.is_correct ? `✓ Correct (🔥 Streak ${r.streak})` : '❌ Wrong'}</span>
+                                    <span>+${r?.points || 0} pts</span>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `;
+        }
     }
 }
