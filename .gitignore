@@ -24,3 +24,5 @@ cloudflared.exe
 *.log
 *.out
 graphify-out/
+ARCHITECTURE.md
+arch.md
