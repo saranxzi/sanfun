@@ -11,6 +11,7 @@ class ClientMessageType(str, Enum):
     BACK_TO_LOBBY = "BACK_TO_LOBBY"
     GAME_ACTION = "GAME_ACTION"
     KICK_PLAYER = "KICK_PLAYER"
+    PROMOTE_HOST = "PROMOTE_HOST"
     PING = "PING"
 
 

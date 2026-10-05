@@ -45,6 +45,7 @@ export class PartyApp {
 
             this.socket.onRoomState = (state: LobbyState | HostGameState) => {
                 if (state.state === "LOBBY") {
+                    this.hostGameView?.destroy();
                     this.hostLobbyView!.updateState(state as LobbyState);
                 } else if (state.state === "IN_GAME") {
                     this.hostLobbyView?.destroy();
@@ -83,6 +84,18 @@ export class PartyApp {
 
         this.socket.onTimerTick = (payload: { phase_timer: number }) => {
             this.playerController?.updateTimerTick(payload.phase_timer);
+        };
+
+        this.socket.onGameEvent = (event: { event: string; [key: string]: any }) => {
+            this.playerController?.handleGameEvent(event);
+        };
+
+        this.socket.onError = (msg: string) => {
+            if (this.socket?.roomCode) {
+                localStorage.removeItem(`sanfun_token_${this.socket.roomCode}`);
+            }
+            alert(`⚠️ ${msg}`);
+            window.location.href = window.location.pathname;
         };
 
         this.playerController.render();

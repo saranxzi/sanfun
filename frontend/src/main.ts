@@ -43,7 +43,7 @@ if (isPartyHost || isPlayer) {
               <div class="card-icon">🖥️</div>
               <h2>HOST A PARTY</h2>
               <p>Create a game room on the big screen. A room code and QR code will be generated for your friends to join.</p>
-              <button class="btn-portal host" id="btn-host-lounge">
+              <button class="btn-primary btn-giant-touch" id="btn-host-lounge">
                 START PARTY LOUNGE
               </button>
             </div>
@@ -56,7 +56,7 @@ if (isPartyHost || isPlayer) {
               <div class="join-quick-form">
                 <input type="text" id="quick-room-code" maxlength="4" placeholder="ROOM CODE (e.g. ABCD)" class="input-code" autocomplete="off" />
                 <input type="text" id="quick-nickname" maxlength="16" placeholder="YOUR NICKNAME" class="input-nick" autocomplete="off" />
-                <button class="btn-portal join" id="btn-quick-join">
+                <button class="btn-secondary btn-giant-touch" id="btn-quick-join">
                   ENTER PARTY
                 </button>
               </div>

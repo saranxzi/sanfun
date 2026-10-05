@@ -28,6 +28,13 @@ export class HostGameView {
         this.render();
     }
 
+    public destroy() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+    }
+
     public updateTimerTick(phaseTimer: number) {
         if (this.state) {
             this.state.phase_timer = phaseTimer;
@@ -37,6 +44,34 @@ export class HostGameView {
 
     public handleGameEvent(_event: { event: string; [key: string]: any }) {
         // Reserved for audio-visual cues
+    }
+
+    private formatBigNumber(val: number | string): string {
+        const num = typeof val === "string" ? parseFloat(val) : val;
+        if (isNaN(num)) return "0";
+        if (num >= 1e21) return `${(num / 1e21).toLocaleString(undefined, { maximumFractionDigits: 2 })} Sextillion (${num.toExponential(2)})`;
+        if (num >= 1e18) return `${(num / 1e18).toLocaleString(undefined, { maximumFractionDigits: 2 })} Quintillion (${num.toExponential(2)})`;
+        if (num >= 1e15) return `${(num / 1e15).toLocaleString(undefined, { maximumFractionDigits: 2 })} Quadrillion`;
+        if (num >= 1e12) return `${(num / 1e12).toLocaleString(undefined, { maximumFractionDigits: 2 })} Trillion`;
+        if (num >= 1e9) return `${(num / 1e9).toLocaleString(undefined, { maximumFractionDigits: 2 })} Billion`;
+        if (num >= 1e6) return `${(num / 1e6).toLocaleString(undefined, { maximumFractionDigits: 2 })} Million`;
+        if (num >= 1e3) return `${num.toLocaleString()}`;
+        return `${num}`;
+    }
+
+    private renderCircleSvg(pts: any[] = [], color: string = "#00f0ff"): string {
+        const polyline = (pts && pts.length > 1)
+            ? `<polyline points="${pts.map((pt: any) => `${Math.round(pt[0])},${Math.round(pt[1])}`).join(" ")}" fill="none" stroke="${color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />`
+            : "";
+        return `
+            <div class="circle-svg-wrap">
+                <svg viewBox="0 0 300 300" class="mini-circle-svg">
+                    <circle cx="150" cy="150" r="100" fill="none" stroke="rgba(255,255,255,0.15)" stroke-dasharray="4 4" stroke-width="2" />
+                    <circle cx="150" cy="150" r="3" fill="#fbbf24" />
+                    ${polyline}
+                </svg>
+            </div>
+        `;
     }
 
     private startLocalTimer() {
@@ -170,20 +205,57 @@ export class HostGameView {
         const s = this.state!;
         if (s.phase === "GAME_OVER") return this.renderPodium(`🐺 MAFIA OVER • ${s.winner === "TOWN" ? "VILLAGE TRIUMPH" : "MAFIA TAKEOVER"}`);
 
+        let phaseTitle = "Town Assembly";
+        let phaseSub = "Deliberate and question each other.";
+        if (s.phase === "ROLE_REVEAL") {
+            phaseTitle = "🎭 Secret Role Assignment";
+            phaseSub = "Check your private roles secretly on your phones!";
+        } else if (s.phase === "NIGHT_ACTIONS") {
+            phaseTitle = "🌙 Night Falls Upon the Village...";
+            phaseSub = "The town sleeps while the Mafia, Doctor, and Detective act in silence.";
+        } else if (s.phase === "DAY_DAWN") {
+            phaseTitle = "☀️ Dawn Breaks Over the Town";
+            phaseSub = s.doctor_saved ? "🛡️ The Doctor intervened! The victim was saved tonight!" : (s.last_killed_name ? `💀 ${s.last_killed_name} was eliminated during the night.` : "No one was eliminated tonight.");
+        } else if (s.phase === "DAY_DISCUSS") {
+            phaseTitle = "🗣️ Open Town Debate";
+            phaseSub = "Discuss who is innocent and who might be lying. Time is ticking!";
+        } else if (s.phase === "DAY_VOTE") {
+            phaseTitle = "⚖️ Village Trial & Accusation";
+            phaseSub = "Cast your votes on your phones. Strict majority required for execution.";
+        } else if (s.phase === "DAY_EXECUTION") {
+            phaseTitle = "🏛️ The Gavel Falls!";
+            phaseSub = s.last_killed_name ? `Town executed ${s.last_killed_name} (${s.last_killed_role || 'Citizen'}).` : "The town could not reach a majority consensus. No one was executed.";
+        }
+
         return `
             <div class="phase-card">
                 <div class="phase-badge">${s.phase.replace("_", " ")}</div>
-                <h2>${s.phase === "NIGHT_ACTIONS" ? "🌙 The Night is Silent..." : (s.phase === "DAY_DEBATE" ? "☀️ Village Assembly" : "⚖️ Voting in Progress")}</h2>
+                <h2>${phaseTitle}</h2>
+                <p class="phase-instruction">${phaseSub}</p>
+
                 <div class="player-roster-grid">
                     ${(s.players || []).map((p: any) => `
                         <div class="player-card ${p.is_alive ? '' : 'eliminated'}">
                             <span class="avatar">${p.avatar}</span>
                             <span class="name">${p.nickname}</span>
-                            <span class="status">${p.is_alive ? 'Alive' : '💀 Executed'}</span>
+                            <span class="status">${p.is_alive ? '🟢 Alive' : '💀 Executed'}</span>
+                            ${p.role_revealed ? `<span class="role-tag">${p.role_revealed}</span>` : ''}
                         </div>
                     `).join("")}
                 </div>
-                ${s.history_log ? `<div class="history-log"><p>${s.history_log[s.history_log.length - 1] || ""}</p></div>` : ""}
+
+                ${s.history_log && s.history_log.length > 0 ? `
+                    <div class="history-log">
+                        <span class="log-label">TOWN CHRONICLE:</span>
+                        <p>${s.history_log[s.history_log.length - 1]}</p>
+                    </div>
+                ` : ""}
+
+                ${s.phase === "DAY_VOTE" && s.votes_cast_count !== undefined ? `
+                    <div class="votes-progress-bar">
+                        Votes Cast: ${s.votes_cast_count} / ${s.alive_count || (s.players || []).length}
+                    </div>
+                ` : ""}
             </div>
         `;
     }
@@ -191,24 +263,47 @@ export class HostGameView {
     // 2. IMPOSTER
     private renderImposter(): string {
         const s = this.state!;
-        if (s.phase === "GAME_OVER") return this.renderPodium(`🕵️ IMPOSTER OVER • ${s.winner} WINS`);
+        if (s.phase === "GAME_OVER") {
+            return `
+                <div class="phase-card">
+                    <div class="phase-badge">GAME OVER • ${s.winner === "IMPOSTER" ? "🦎 IMPOSTER TRIUMPH" : "🛡️ CREW VICTORY"}</div>
+                    <h1>${s.winner === "IMPOSTER" ? "The Imposter Fooled the Room!" : "The Imposter Was Caught!"}</h1>
+                    <div class="secret-word-card">
+                        <span class="label">SECRET WORD:</span>
+                        <div class="secret-word-highlight">${s.secret_word || "???"}</div>
+                    </div>
+                    ${this.renderPodium(`${s.winner} WINS`)}
+                </div>
+            `;
+        }
 
         return `
             <div class="phase-card">
                 <div class="phase-badge">CATEGORY: ${s.category || "General"}</div>
-                <h2>${s.phase === "WORD_REVEAL" ? "Secret Words Revealed on Phones..." : (s.phase === "CLUE_ROUNDS" ? "🗣️ Speak Your Clues in Order" : "🗳️ Vote for the Imposter")}</h2>
+                <h2>${s.phase === "WORD_REVEAL" ? "Secret Words Revealed on Phones..." : (s.phase === "CLUE_ROUNDS" ? "🗣️ Speak One-Word Clues in Order" : (s.phase === "VOTING" ? "🗳️ Vote for the Imposter" : "🚨 Imposter's Final Clutch Guess!"))}</h2>
+                <p class="phase-instruction">
+                    ${s.phase === "CLUE_ROUNDS" ? "Each player says ONE word related to the secret word without giving it away to the Imposter!" : (s.phase === "IMPOSTER_GUESS" ? `Imposter was accused! They have 18s to guess the secret word from the board below!` : "Keep your phones tilted away from others.")}
+                </p>
+
                 <div class="clue-speaker-track">
-                    ${(s.clue_order || []).map((pid: string, idx: number) => {
-                        const p = s.players.find((pl: any) => pl.id === pid);
-                        return `
-                            <div class="speaker-pill">
-                                <span class="order">#${idx + 1}</span>
-                                <span>${p?.avatar || "👤"}</span>
-                                <span>${p?.nickname || pid}</span>
-                            </div>
-                        `;
-                    }).join("")}
+                    ${(s.clue_order || []).map((name: string, idx: number) => `
+                        <div class="speaker-pill">
+                            <span class="order">#${idx + 1}</span>
+                            <span>👤</span>
+                            <span>${name}</span>
+                        </div>
+                    `).join("")}
                 </div>
+
+                ${s.candidate_words && s.candidate_words.length > 0 ? `
+                    <div class="tv-words-board">
+                        <span class="board-header">CATEGORY BOARD: ${s.category?.toUpperCase()}</span>
+                        <div class="tv-words-grid">
+                            ${s.candidate_words.map((w: string) => `<div class="tv-word-tile">${w}</div>`).join("")}
+                        </div>
+                    </div>
+                ` : ""}
+
                 ${this.renderSubmittedChips(s.submitted_pids || [])}
             </div>
         `;
@@ -227,7 +322,7 @@ export class HostGameView {
                     <div class="phase-badge">ROUND ${s.round_number || 1} • ${s.round_type} RECALL</div>
                     <h2>${isColor ? `Memorize: ${col.name || 'Target Color'}` : `Listen Closely: ${s.target_pitch?.name || 'Target Tone'}`}</h2>
                     ${isColor ? `
-                        <div class="target-swatch" style="background: hsl(${col.h}, ${col.s * 100}%, ${col.v * 50}%); width: 200px; height: 200px; border-radius: 24px; margin: 1.5rem auto; box-shadow: 0 12px 40px rgba(0,0,0,0.5); border: 3px solid rgba(255,255,255,0.2);"></div>
+                        <div class="target-swatch" style="background: ${col.hex || `hsl(${col.h}, ${col.s * 100}%, 50%)`}; width: 200px; height: 200px; border-radius: 24px; margin: 1.5rem auto; box-shadow: 0 12px 40px rgba(0,0,0,0.5); border: 3px solid rgba(255,255,255,0.2);"></div>
                     ` : `
                         <div class="target-tone-card" style="margin: 2rem auto; font-size: 3rem;">🎵</div>
                     `}
@@ -289,7 +384,7 @@ export class HostGameView {
                 <div class="phase-card">
                     <div class="phase-badge">ACTUAL VALUE REVEAL</div>
                     <div class="actual-value-box">
-                        <span class="actual-num">${typeof s.actual === "number" ? s.actual.toLocaleString() : s.actual}</span>
+                        <span class="actual-num">${this.formatBigNumber(s.actual)}</span>
                         <span class="actual-unit">${s.unit || ""}</span>
                     </div>
                     <p class="fact-box">💡 ${s.fact || ""}</p>
@@ -299,7 +394,7 @@ export class HostGameView {
                             return `
                                 <div class="fermi-res-item">
                                     <span class="av">${p.avatar} ${p.nickname}</span>
-                                    <span class="guess">Guess: ${r ? (typeof r.guess === "number" ? r.guess.toLocaleString() : r.guess) : 0}</span>
+                                    <span class="guess">Guess: ${r ? this.formatBigNumber(r.guess) : 0}</span>
                                     <span class="diff">${r ? `±${r.d_log} orders` : 'Missed'}</span>
                                     <span class="pts">+${r ? r.points : 0} pts</span>
                                 </div>
@@ -388,6 +483,7 @@ export class HostGameView {
                             return `
                                 <div class="circle-card">
                                     <div class="user-row">${p.avatar} <strong>${p.nickname}</strong></div>
+                                    ${this.renderCircleSvg(s.drawings?.[p.id], p.color)}
                                     <div class="circle-score">${e ? `${e.score_pct}%` : '0%'}</div>
                                     <div class="circle-metrics">
                                         <span>Coverage: ${e?.metrics?.angular_coverage_pct || 0}%</span>

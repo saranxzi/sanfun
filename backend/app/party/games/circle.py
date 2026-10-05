@@ -9,13 +9,13 @@ def evaluate_circle_points(points: List[List[float]]) -> tuple[float, Dict[str, 
     """
     Evaluates drawn points against circle invariants:
     - Min points N >= 30
-    - Center (cx, cy) and radius R in [30, 500]
-    - Angular bin coverage across 36 sectors (10 deg each) >= 85%
-    - Closure gap penalty between start and end point
+    - Center (cx, cy) and radius R in [30, 600]
+    - Angular bin coverage across 36 sectors (10 deg each) >= 80% (rejects short-arc exploits)
+    - Closure gap penalty between start and end point (rejects unclosed strokes)
     """
     n = len(points)
     if n < 30:
-        return 0.0, {"reason": "Too few points (minimum 30 required)", "points_count": n}
+        return 0.0, {"score": 0.0, "reason": "Too few points (minimum 30 required)", "points_count": n}
 
     # 1. Centroid estimate
     cx = sum(p[0] for p in points) / n
@@ -26,7 +26,7 @@ def evaluate_circle_points(points: List[List[float]]) -> tuple[float, Dict[str, 
     r_mean = sum(radii) / n
 
     if r_mean < 30.0 or r_mean > 600.0:
-        return 0.0, {"reason": "Circle radius out of bounds (must be 30-600px)", "mean_radius": round(r_mean, 1)}
+        return 0.0, {"score": 0.0, "reason": "Circle radius out of bounds (must be 30-600px)", "mean_radius": round(r_mean, 1)}
 
     # 3. Radial RMSE / standard deviation
     variance = sum((r - r_mean) ** 2 for r in radii) / n
@@ -42,17 +42,31 @@ def evaluate_circle_points(points: List[List[float]]) -> tuple[float, Dict[str, 
         visited_bins.add(bin_idx)
 
     coverage_frac = len(visited_bins) / 36.0
-    coverage_multiplier = coverage_frac if coverage_frac >= 0.85 else (coverage_frac ** 3)
+    if coverage_frac < 0.80:
+        return 0.0, {
+            "score": 0.0,
+            "reason": "Circle incomplete (must draw a full 360° closed loop)",
+            "angular_coverage_pct": round(coverage_frac * 100.0, 1),
+            "visited_bins": len(visited_bins)
+        }
 
     # 5. Start-to-end closure gap
     start_p = points[0]
     end_p = points[-1]
     closure_dist = math.sqrt((end_p[0] - start_p[0]) ** 2 + (end_p[1] - start_p[1]) ** 2)
     gap_ratio = closure_dist / r_mean
-    closure_factor = max(0.0, 1.0 - min(1.0, gap_ratio))
+
+    if gap_ratio > 0.45:
+        return 0.0, {
+            "score": 0.0,
+            "reason": "Loop not closed (start and end points did not meet)",
+            "closure_gap_ratio": round(gap_ratio, 3)
+        }
+
+    closure_factor = max(0.0, 1.0 - (gap_ratio * 1.5))
 
     # Final percentage score
-    final_score = 100.0 * radial_precision * closure_factor * coverage_multiplier
+    final_score = 100.0 * radial_precision * closure_factor * (coverage_frac ** 2)
     final_score = max(0.0, min(100.0, round(final_score, 1)))
 
     return final_score, {

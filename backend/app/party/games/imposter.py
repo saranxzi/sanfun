@@ -442,16 +442,21 @@ class ImposterGame(BasePartyGame):
             tally[target] = tally.get(target, 0) + 1
 
         if tally:
-            self.voted_out_id = max(tally, key=tally.get)
+            sorted_tally = sorted(tally.items(), key=lambda item: item[1], reverse=True)
+            if len(sorted_tally) > 1 and sorted_tally[0][1] == sorted_tally[1][1]:
+                # Tie vote: crew failed to reach consensus on a single suspect
+                self.voted_out_id = None
+            else:
+                self.voted_out_id = sorted_tally[0][0]
         else:
-            self.voted_out_id = random.choice(list(self.players.keys()))
+            self.voted_out_id = None
 
-        if self.voted_out_id in self.imposter_ids:
+        if self.voted_out_id and self.voted_out_id in self.imposter_ids:
             # Imposter caught! Give them 18 seconds to clutch-guess the word
             self.phase = "IMPOSTER_GUESS"
             self.phase_timer = 18.0
         else:
-            # Imposter escaped detection! Imposter wins!
+            # Imposter escaped detection (wrong conviction, tie, or no votes)! Imposter wins!
             self.winner = "IMPOSTER"
             for imp in self.imposter_ids:
                 self.scores[imp] += 300

@@ -153,7 +153,7 @@ class MafiaGame(BasePartyGame):
             # Strict plurality: top candidate must have strictly more votes than second place
             if len(sorted_tally) > 1 and sorted_tally[0][1] == sorted_tally[1][1]:
                 eliminated_id = None
-            elif sorted_tally[0][1] > len(self.alive_players) // 2:
+            else:
                 eliminated_id = sorted_tally[0][0]
 
         if eliminated_id:

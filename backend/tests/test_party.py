@@ -408,3 +408,185 @@ def test_host_websocket_authentication():
         assert msg["type"] == "ROOM_STATE"
 
 
+@pytest.mark.asyncio
+async def test_back_to_lobby_player_synchronization():
+    room = room_manager.create_room()
+    p1, tok1 = room.add_player("Alice")
+    p2, tok2 = room.add_player("Bob")
+
+    received_player1 = []
+    received_player2 = []
+    received_host = []
+
+    class MockWS:
+        def __init__(self, target_list):
+            self.target_list = target_list
+            self.closed = False
+
+        async def send_json(self, data):
+            self.target_list.append(data)
+
+        async def close(self, code=1000):
+            self.closed = True
+
+    ws_p1 = MockWS(received_player1)
+    ws_p2 = MockWS(received_player2)
+    ws_host = MockWS(received_host)
+
+    room.player_sockets[p1.id] = ws_p1
+    room.player_sockets[p2.id] = ws_p2
+    room.host_socket = ws_host
+
+    room.selected_game_id = "fermi"
+    await room.start_game()
+    assert room.state == "IN_GAME"
+    assert room.game_instance is not None
+
+    # Simulate in-game points
+    room.game_instance.scores[p1.id] = 500
+    room.game_instance.scores[p2.id] = 750
+
+    # Trigger BACK_TO_LOBBY
+    await room.back_to_lobby()
+
+    # Verify state transitions
+    assert room.state == "LOBBY"
+    assert room.game_instance is None
+    # Cumulative scores preserved
+    assert room.players[p1.id].score == 500
+    assert room.players[p2.id].score == 750
+
+    # Verify PLAYER_STATE was delivered to connected players with state: LOBBY
+    player_states_p1 = [m for m in received_player1 if m.get("type") == "PLAYER_STATE"]
+    assert len(player_states_p1) > 0
+    latest_p1 = player_states_p1[-1]["payload"]
+    assert latest_p1["state"] == "LOBBY"
+    assert latest_p1["game_id"] is None
+    assert latest_p1["phase"] == "LOBBY"
+    assert latest_p1["score"] == 500
+
+    # Verify GAME_EVENT BACK_TO_LOBBY was broadcast
+    events_p1 = [m for m in received_player1 if m.get("type") == "GAME_EVENT" and m.get("payload", {}).get("event") == "BACK_TO_LOBBY"]
+    assert len(events_p1) > 0
+
+
+@pytest.mark.asyncio
+async def test_kick_and_promote_player():
+    room = room_manager.create_room()
+    p1, tok1 = room.add_player("Alice")
+    p2, tok2 = room.add_player("Bob")
+
+    received_p1 = []
+    received_p2 = []
+
+    class MockWS:
+        def __init__(self, target_list):
+            self.target_list = target_list
+            self.closed = False
+
+        async def send_json(self, data):
+            self.target_list.append(data)
+
+        async def close(self, code=1000):
+            self.closed = True
+
+    ws1 = MockWS(received_p1)
+    ws2 = MockWS(received_p2)
+    room.player_sockets[p1.id] = ws1
+    room.player_sockets[p2.id] = ws2
+
+    # Promote Bob to host
+    await room.promote_host(p2.id)
+    assert room.players[p2.id].is_host is True
+    assert room.players[p1.id].is_host is False
+
+    # Check Bob received promotion notice
+    bob_events = [m for m in received_p2 if m.get("type") == "GAME_EVENT" and m.get("payload", {}).get("event") == "PROMOTED_TO_HOST"]
+    assert len(bob_events) == 1
+    assert bob_events[0]["payload"]["host_token"] == room.host_token
+
+    # Kick Alice
+    await room.kick_player(p1.id)
+    assert p1.id not in room.players
+    assert p1.id not in room.player_sockets
+    assert tok1 not in room.session_tokens
+    assert ws1.closed is True
+    # Alice received error message
+    assert any(m.get("type") == "ERROR" for m in received_p1)
+
+
+def test_circle_exploit_guards():
+    # 1. Short arc (only 90 degrees) -> should be rejected with 0.0 score
+    arc_points = []
+    for deg in range(0, 90, 2):
+        rad = math.radians(deg)
+        arc_points.append([150 + 100 * math.cos(rad), 150 + 100 * math.sin(rad)])
+    score_arc, metrics_arc = evaluate_circle_points(arc_points)
+    assert score_arc == 0.0
+    assert "incomplete" in metrics_arc.get("reason", "").lower()
+
+    # 2. Unclosed circle (gap ratio too large) -> rejected with 0.0 score
+    unclosed_points = []
+    for deg in range(0, 300, 5):
+        rad = math.radians(deg)
+        unclosed_points.append([150 + 100 * math.cos(rad), 150 + 100 * math.sin(rad)])
+    score_unclosed, metrics_unclosed = evaluate_circle_points(unclosed_points)
+    assert score_unclosed == 0.0
+
+    # 3. High precision closed circle -> high score (>85%)
+    good_points = []
+    for deg in range(0, 360, 5):
+        rad = math.radians(deg)
+        good_points.append([150 + 100 * math.cos(rad), 150 + 100 * math.sin(rad)])
+    # close the loop
+    good_points.append([good_points[0][0], good_points[0][1]])
+    score_good, metrics_good = evaluate_circle_points(good_points)
+    assert score_good >= 90.0
+    assert metrics_good["angular_coverage_pct"] >= 95.0
+
+
+def test_dialed_color_normalization():
+    target = {"h": 180, "s": 0.9, "v": 0.9}
+    # Guess with 0-100 percentage values
+    guess_pct = {"h": 180, "s": 90, "v": 90}
+    # Guess with normalized 0-1.0 values
+    guess_norm = {"h": 180, "s": 0.9, "v": 0.9}
+
+    score_pct = calculate_color_score(target, guess_pct)
+    score_norm = calculate_color_score(target, guess_norm)
+    assert score_pct == score_norm
+    assert score_pct == 100.0
+
+
+def test_mafia_plurality_execution():
+    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(5)}
+    game = MafiaGame("TEST", players)
+    game.start()
+
+    # Clear alive players and simulate day vote
+    game.alive_players = {"p0", "p1", "p2", "p3", "p4"}
+    game.phase = "DAY_VOTE"
+    # p1 gets 2 votes, p2 gets 1 vote, p3 gets 1 vote
+    game.day_votes = {"p0": "p1", "p4": "p1", "p1": "p2", "p2": "p3"}
+    game.resolve_day_vote()
+    assert game.last_killed_id == "p1"
+    assert "executed" in game.history_log[-1].lower()
+
+
+def test_imposter_tie_vote_handling():
+    players = {f"p{i}": PlayerInfo(id=f"p{i}", nickname=f"Player_{i}") for i in range(4)}
+    game = ImposterGame("TEST", players)
+    game.start()
+
+    game.phase = "VOTING"
+    # Tie vote between p0 and p1
+    game.votes = {"p0": "p1", "p2": "p1", "p1": "p0", "p3": "p0"}
+    game.resolve_voting()
+    # Tie means no conviction -> imposter escapes -> imposter wins!
+    assert game.voted_out_id is None
+    assert game.winner == "IMPOSTER"
+    assert game.is_over is True
+
+
+
+

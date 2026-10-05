@@ -48,6 +48,132 @@ DILEMMAS = [
         "icon_a": "🎶",
         "icon_b": "🌊"
     },
+    {
+        "title": "The Animal Whisperer",
+        "option_a": "You can speak fluent English with every dog and cat on Earth",
+        "option_b": "You can speak and understand every human language fluently",
+        "icon_a": "🐕",
+        "icon_b": "🌐"
+    },
+    {
+        "title": "The Rewind Button",
+        "option_a": "A button that rewinds time by 10 minutes (usable once per day)",
+        "option_b": "A button that pauses universal time for 1 hour (usable once per week)",
+        "icon_a": "⏪",
+        "icon_b": "⏸️"
+    },
+    {
+        "title": "The Culinary Monolith",
+        "option_a": "Eat world-class gourmet dining every day, but you can only drink plain lukewarm tap water",
+        "option_b": "Drink any top-tier beverage for free forever, but all food tastes like unsalted mashed potatoes",
+        "icon_a": "🥩",
+        "icon_b": "🍷"
+    },
+    {
+        "title": "The Career Lottery",
+        "option_a": "Earn $500,000/year doing a deeply boring data entry job 40 hours a week",
+        "option_b": "Earn $60,000/year working only 10 hours a week at your dream creative passion",
+        "icon_a": "💼",
+        "icon_b": "🎨"
+    },
+    {
+        "title": "The Omniscient Spoiler",
+        "option_a": "Know the exact year, day, and cause of your own death",
+        "option_b": "Know the exact year, day, and cause of death of everyone you love (except yourself)",
+        "icon_a": "⚰️",
+        "icon_b": "🔮"
+    },
+    {
+        "title": "The Soundtrack of Life",
+        "option_a": "Epic cinematic orchestra music plays in the background of your life matching your emotions",
+        "option_b": "A studio sitcom laugh-track plays whenever you do something awkward or funny",
+        "icon_a": "🎻",
+        "icon_b": "😂"
+    },
+    {
+        "title": "The Robot Uprising",
+        "option_a": "Submit to a benevolent supercomputer overlord who eliminates disease and poverty but bans free elections",
+        "option_b": "Remain in chaotic, flawed human democracy with all its wars, recessions, and crises",
+        "icon_a": "🤖",
+        "icon_b": "🗳️"
+    },
+    {
+        "title": "The Memory Wipe",
+        "option_a": "Erase your worst memory forever, but lose your happiest memory alongside it",
+        "option_b": "Keep both memories intact with 100% emotional clarity forever",
+        "icon_a": "🧹",
+        "icon_b": "🧠"
+    },
+    {
+        "title": "The Trolley & The Self-Driving Car",
+        "option_a": "Program autonomous cars to always sacrifice the passenger to save 3 pedestrians",
+        "option_b": "Program autonomous cars to always protect the passenger at all costs",
+        "icon_a": "🚶",
+        "icon_b": "🚗"
+    },
+    {
+        "title": "The Fame Dilemma",
+        "option_a": "Be universally famous worldwide, but 30% of the population actively despises you",
+        "option_b": "Be completely unknown and anonymous, but loved deeply by a tight circle of 5 friends",
+        "icon_a": "🌟",
+        "icon_b": "🏡"
+    },
+    {
+        "title": "The Weather Oracle",
+        "option_a": "It is always a crisp 72°F (22°C) sunny afternoon wherever you go",
+        "option_b": "You can summon cozy, soothing autumn thunderstorms whenever you feel like resting",
+        "icon_a": "☀️",
+        "icon_b": "⛈️"
+    },
+    {
+        "title": "The Smartphone Curse",
+        "option_a": "Your smartphone battery never drops below 100%, but your Wi-Fi is permanently 3G speed",
+        "option_b": "Blazing Gigabit 10Gbps internet everywhere, but your battery dies in 45 minutes",
+        "icon_a": "🔋",
+        "icon_b": "⚡"
+    },
+    {
+        "title": "The Telepathic Pet",
+        "option_a": "Your pet understands every human word you say, but can never respond",
+        "option_b": "Your pet can speak 5 sentences in English, but criticizes your life choices daily",
+        "icon_a": "🐱",
+        "icon_b": "🗣️"
+    },
+    {
+        "title": "The Historical Vacation",
+        "option_a": "Spend 1 week living in ancient Rome during its peak golden age with full diplomatic immunity",
+        "option_b": "Spend 1 week exploring a vibrant cyberpunk city on Mars in the year 2350",
+        "icon_a": "🏛️",
+        "icon_b": "🛸"
+    },
+    {
+        "title": "The Dream Recorder",
+        "option_a": "Wake up every morning with a 4K downloadable video file of whatever you dreamed",
+        "option_b": "Have full conscious lucid-dreaming control of your dreams every single night",
+        "icon_a": "📹",
+        "icon_b": "✨"
+    },
+    {
+        "title": "The Universal Refund",
+        "option_a": "Get a full cash refund on every item or service you ever bought that you regretted",
+        "option_b": "Get back all the wasted hours you ever spent stuck in traffic or waiting in line",
+        "icon_a": "💰",
+        "icon_b": "⌛"
+    },
+    {
+        "title": "The Wardrobe Miracle",
+        "option_a": "A magical closet that dispenses any outfit you imagine, perfectly tailored and cleaned",
+        "option_b": "Never need to brush your teeth, shower, or shave—you remain perpetually fresh and groomed",
+        "icon_a": "👔",
+        "icon_b": "✨"
+    },
+    {
+        "title": "The Ultimate Dinner Guest",
+        "option_a": "Have a private 2-hour dinner with any historical figure who has ever lived",
+        "option_b": "Have a private 2-hour dinner with your great-great-grandchild from 100 years in the future",
+        "icon_a": "📜",
+        "icon_b": "👶"
+    },
 ]
 
 

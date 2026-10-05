@@ -35,7 +35,7 @@ AUCTION_ITEMS = [
         "category": "Automotive Legend",
         "description": "Iconic silver-and-yellow Tour de France winning supercar, one of only 36 ever manufactured in Maranello.",
         "hammer_price": 70000000,
-        "fact": "Sold in private auction for approximately $70 Million to weathertech founder David MacNeil.",
+        "fact": "Sold in private auction for approximately $70 Million to WeatherTech founder David MacNeil.",
         "icon": "🏎️"
     },
     {
@@ -69,7 +69,103 @@ AUCTION_ITEMS = [
         "hammer_price": 6010000,
         "fact": "Sold in 2020 for $6.01 Million to RØDE Microphones founder Peter Freedman.",
         "icon": "🎸"
-    }
+    },
+    {
+        "title": "The Codex Leicester by Leonardo da Vinci",
+        "category": "Scientific Manuscript",
+        "description": "A 72-page handwritten journal filled with Da Vinci's pioneering scientific musings, mirror-written in Italian.",
+        "hammer_price": 30800000,
+        "fact": "Purchased by Bill Gates at Christie's in 1994 for $30.8 Million.",
+        "icon": "📜"
+    },
+    {
+        "title": "Michael Jordan's 1998 NBA Finals Game 2 Jersey",
+        "category": "Sports Memorabilia",
+        "description": "The red Chicago Bulls away jersey worn during Game 2 of Jordan's legendary 'Last Dance' finals series.",
+        "hammer_price": 10100000,
+        "fact": "Hammered at Sotheby's in 2022 for $10.1 Million, setting an all-time record for sports apparel.",
+        "icon": "🏀"
+    },
+    {
+        "title": "The Pink Star Diamond (59.60 Carats)",
+        "category": "Priceless Jewel",
+        "description": "An internally flawless, fancy vivid pink oval-cut diamond mined in 1999 by De Beers in South Africa.",
+        "hammer_price": 71200000,
+        "fact": "Sold at Sotheby's Hong Kong in 2017 for $71.2 Million to Chow Tai Fook Enterprises.",
+        "icon": "💎"
+    },
+    {
+        "title": "First Ever Tweet by Jack Dorsey (NFT)",
+        "category": "Digital Oddity",
+        "description": "The historic first tweet reading 'just setting up my twttr' minted as a cryptographic token.",
+        "hammer_price": 2900000,
+        "fact": "Sold in March 2021 for $2.9 Million to crypto investor Sina Estavi (subsequent resales dropped below $1,000).",
+        "icon": "🐦"
+    },
+    {
+        "title": "Darth Vader's Screen-Used Empire Strikes Back Helmet",
+        "category": "Cinema Relic",
+        "description": "The iconic two-piece black mask and helmet worn by actor David Prowse in Episode V.",
+        "hammer_price": 1125000,
+        "fact": "Auctioned in Los Angeles in 2019 for $1.125 Million to a private sci-fi memorabilia collector.",
+        "icon": "⚔️"
+    },
+    {
+        "title": "Honus Wagner T206 Baseball Card (PSA 2)",
+        "category": "Trading Card",
+        "description": "The Holy Grail of sports collectibles, pulled from American Tobacco packs in 1909 before distribution was halted.",
+        "hammer_price": 7250000,
+        "fact": "Sold in a private Goldin Auctions deal in 2022 for a record $7.25 Million.",
+        "icon": "⚾"
+    },
+    {
+        "title": "1856 British Guiana 1-Cent Magenta Postage Stamp",
+        "category": "Philately",
+        "description": "The sole surviving specimen of an emergency colonial issue stamp, weighing just 0.04 grams.",
+        "hammer_price": 8307000,
+        "fact": "Acquired by shoe designer Stuart Weitzman for $9.48 Million in 2014, then resold in 2021 for $8.3 Million.",
+        "icon": "📬"
+    },
+    {
+        "title": "Neil Armstrong's Apollo 11 Lunar Sample Bag",
+        "category": "Space Exploration",
+        "description": "White collection pouch labeled 'LUNAR SAMPLE RETURN' with authentic moon dust embedded in the fabric seams.",
+        "hammer_price": 1812500,
+        "fact": "Sold at Sotheby's in 2017 for $1.81 Million after a protracted legal battle with NASA.",
+        "icon": "🌕"
+    },
+    {
+        "title": "Original 1968 Prototype Apple-1 Computer (Steve Jobs)",
+        "category": "Tech History",
+        "description": "Hand-soldered by Steve Wozniak on a 'Celebration' PCB, used by Steve Jobs to demonstrate to The Byte Shop.",
+        "hammer_price": 677196,
+        "fact": "Sold at RR Auction in Boston in 2022 for $677,196.",
+        "icon": "💻"
+    },
+    {
+        "title": "Napoleon Bonaparte's Bicorne Hat from Waterloo",
+        "category": "Historical Relic",
+        "description": "Black beaver felt hat adorned with Napoleon's signature cockade, worn during the 1815 Belgian campaign.",
+        "hammer_price": 2100000,
+        "fact": "Hammered at Drouot auction house in Paris in 2023 for 1.93 Million Euros ($2.1 Million).",
+        "icon": "🎩"
+    },
+    {
+        "title": "A Gold Pocket Watch from the RMS Titanic",
+        "category": "Maritime Tragedy",
+        "description": "Tiffany & Co. 18-carat gold watch gifted to Captain Arthur Rostron of the rescue ship RMS Carpathia.",
+        "hammer_price": 1970000,
+        "fact": "Sold in Wiltshire in 2024 for 1.56 Million Pounds ($1.97 Million), a Titanic record.",
+        "icon": "⏱️"
+    },
+    {
+        "title": "Maurizio Cattelan's 'Comedian' (Banana Duct-Taped to Wall)",
+        "category": "Contemporary Art",
+        "description": "A fresh banana affixed to a white gallery wall with silver duct tape, accompanied by certificate of authenticity.",
+        "hammer_price": 6240000,
+        "fact": "Hammered at Sotheby's New York in 2024 for $6.24 Million to cryptocurrency entrepreneur Justin Sun.",
+        "icon": "🍌"
+    },
 ]
 
 

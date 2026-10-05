@@ -195,15 +195,45 @@ export class HostLobbyView {
                                 ${!canStart ? `<span class="min-warn">Need ${selectedGame.min_players - this.state.players.length} more to start</span>` : `<span class="ready-tag">READY TO START!</span>`}
                             </div>
 
-                            <div class="player-grid">
-                                ${this.state.players.map(p => `
-                                    <div class="player-chip" style="border-color: ${p.color};">
-                                        <span class="player-avatar">${p.avatar}</span>
-                                        <span class="player-name">${p.nickname}</span>
-                                        ${p.is_connected ? `<span class="dot-online"></span>` : `<span class="dot-offline"></span>`}
-                                    </div>
-                                `).join("")}
-                                ${this.state.players.length === 0 ? `<div class="empty-roster-msg">Waiting for phones to connect...</div>` : ""}
+                            <div class="roster-list-container">
+                                <div class="roster-list">
+                                    ${this.state.players.map(p => `
+                                        <div class="roster-item ${p.is_host ? "is-host-item" : ""}">
+                                            <div class="roster-item-left">
+                                                <div class="roster-avatar-badge" style="background: ${p.color}22; border-color: ${p.color};">
+                                                    <span>${p.avatar}</span>
+                                                </div>
+                                                <div class="roster-name-group">
+                                                    <div class="roster-nick-row">
+                                                        <span class="roster-nickname">${p.nickname}</span>
+                                                        ${p.is_host ? `<span class="host-badge-chip">👑 HOST</span>` : ""}
+                                                    </div>
+                                                    <div class="roster-status-row">
+                                                        ${p.is_connected ? `
+                                                            <span class="status-indicator online"><span class="dot-online"></span> Connected</span>
+                                                        ` : `
+                                                            <span class="status-indicator offline"><span class="dot-offline"></span> Reconnecting...</span>
+                                                        `}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="roster-item-right">
+                                                <span class="roster-score-pill">${p.score || 0} pts</span>
+                                                <div class="host-row-actions">
+                                                    ${!p.is_host ? `
+                                                        <button class="btn-action-promote" data-id="${p.id}" title="Make Host">
+                                                            👑 Make Host
+                                                        </button>
+                                                    ` : ""}
+                                                    <button class="btn-action-kick" data-id="${p.id}" data-name="${p.nickname}" title="Remove Player">
+                                                        ✕ Remove
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join("")}
+                                    ${this.state.players.length === 0 ? `<div class="empty-roster-msg">Waiting for phones to connect...</div>` : ""}
+                                </div>
                             </div>
                         </div>
 
@@ -251,6 +281,29 @@ export class HostLobbyView {
                 if (gameId) {
                     soundManager.playDing();
                     this.socket.send("SELECT_GAME", { game_id: gameId });
+                }
+            });
+        });
+
+        this.container.querySelectorAll(".btn-action-promote").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const pid = (e.currentTarget as HTMLElement).dataset.id;
+                if (pid) {
+                    soundManager.playDing();
+                    this.socket.send("PROMOTE_HOST", { target_player_id: pid });
+                }
+            });
+        });
+
+        this.container.querySelectorAll(".btn-action-kick").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const pid = (e.currentTarget as HTMLElement).dataset.id;
+                const name = (e.currentTarget as HTMLElement).dataset.name || "this player";
+                if (pid && confirm(`Remove ${name} from the room?`)) {
+                    soundManager.playLeave();
+                    this.socket.send("KICK_PLAYER", { target_player_id: pid });
                 }
             });
         });

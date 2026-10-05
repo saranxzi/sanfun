@@ -146,7 +146,30 @@ class PartyRoom:
                     self.players[pid].score = score
         self.state = "LOBBY"
         self.game_instance = None
+        # 1. Broadcast ROOM_STATE to Host and all connected clients
         await self.broadcast_room_state()
+        # 2. Immediately send updated PLAYER_STATE to every connected player WebSocket
+        tasks = []
+        for pid, ws in list(self.player_sockets.items()):
+            p_info = self.players.get(pid)
+            payload = {
+                "room_code": self.code,
+                "state": "LOBBY",
+                "game_id": None,
+                "phase": "LOBBY",
+                "phase_timer": 0,
+                "player_id": pid,
+                "nickname": p_info.nickname if p_info else "",
+                "avatar": p_info.avatar if p_info else "🎮",
+                "color": p_info.color if p_info else "#00f0ff",
+                "is_host": p_info.is_host if p_info else False,
+                "score": p_info.score if p_info else 0,
+            }
+            tasks.append(self.send_json_safe(ws, ServerMessageType.PLAYER_STATE, payload))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        # 3. Broadcast GAME_EVENT for both BACK_TO_LOBBY and RETURN_TO_LOBBY
+        await self.broadcast_event("BACK_TO_LOBBY", {})
         await self.broadcast_event("RETURN_TO_LOBBY", {})
 
     def add_player(self, nickname: str, avatar: Optional[str] = None, color: Optional[str] = None) -> tuple[PlayerInfo, str]:
@@ -189,14 +212,47 @@ class PartyRoom:
                 # In lobby, remove disconnected players after clean exit
                 pass
 
-    def kick_player(self, pid: str):
-        if pid in self.players:
-            self.players.pop(pid, None)
-            ws = self.player_sockets.pop(pid, None)
-            # Remove session token
-            tokens_to_del = [tok for tok, p in self.session_tokens.items() if p == pid]
-            for tok in tokens_to_del:
-                self.session_tokens.pop(tok, None)
+    def _remove_player_record(self, pid: str) -> Optional[PlayerInfo]:
+        p_info = self.players.pop(pid, None)
+        tokens_to_del = [tok for tok, p in self.session_tokens.items() if p == pid]
+        for tok in tokens_to_del:
+            self.session_tokens.pop(tok, None)
+        if self.game_instance:
+            self.game_instance.on_player_disconnect(pid)
+        return p_info
+
+    async def kick_player(self, pid: str):
+        ws = self.player_sockets.pop(pid, None)
+        p_info = self._remove_player_record(pid)
+        if ws:
+            try:
+                await self.send_json_safe(ws, ServerMessageType.ERROR, {"message": "You were removed from the room by the host."})
+                await ws.close(code=1000)
+            except Exception:
+                pass
+        await self.broadcast_room_state()
+        if p_info:
+            await self.broadcast_event("PLAYER_KICKED", {"player_id": pid, "nickname": p_info.nickname})
+
+    async def promote_host(self, target_pid: str):
+        if target_pid in self.players:
+            for pid, p in self.players.items():
+                p.is_host = (pid == target_pid)
+            target_player = self.players[target_pid]
+            # Send host promotion notice to target player WebSocket
+            target_ws = self.player_sockets.get(target_pid)
+            if target_ws:
+                await self.send_json_safe(target_ws, ServerMessageType.GAME_EVENT, {
+                    "event": "PROMOTED_TO_HOST",
+                    "host_token": self.host_token,
+                    "target_player_id": target_pid,
+                    "nickname": target_player.nickname
+                })
+            await self.broadcast_room_state()
+            await self.broadcast_event("HOST_PROMOTED", {
+                "target_player_id": target_pid,
+                "nickname": target_player.nickname
+            })
 
 
 class PartyRoomManager:

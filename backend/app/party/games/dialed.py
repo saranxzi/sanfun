@@ -7,23 +7,45 @@ from app.party.protocol import PlayerInfo
 
 
 TARGET_COLORS = [
-    {"name": "Electric Cyan", "h": 184, "s": 0.95, "v": 1.0},
-    {"name": "Crimson Velvet", "h": 348, "s": 0.88, "v": 0.85},
-    {"name": "Amber Sunrise", "h": 38, "s": 0.92, "v": 0.98},
-    {"name": "Neon Emerald", "h": 142, "s": 0.85, "v": 0.92},
-    {"name": "Royal Purple", "h": 272, "s": 0.78, "v": 0.82},
-    {"name": "Hot Magenta", "h": 315, "s": 0.90, "v": 0.95},
-    {"name": "Tangerine Burst", "h": 22, "s": 0.94, "v": 0.96},
-    {"name": "Cobalt Blue", "h": 220, "s": 0.86, "v": 0.90},
+    {"name": "Electric Cyan", "h": 184, "s": 0.95, "v": 1.0, "hex": "#0df0ff"},
+    {"name": "Crimson Velvet", "h": 348, "s": 0.88, "v": 0.85, "hex": "#d91a45"},
+    {"name": "Amber Sunrise", "h": 38, "s": 0.92, "v": 0.98, "hex": "#faa014"},
+    {"name": "Neon Emerald", "h": 142, "s": 0.85, "v": 0.92, "hex": "#23eb6a"},
+    {"name": "Royal Purple", "h": 272, "s": 0.78, "v": 0.82, "hex": "#7d2ed1"},
+    {"name": "Hot Magenta", "h": 315, "s": 0.90, "v": 0.95, "hex": "#f218b7"},
+    {"name": "Tangerine Burst", "h": 22, "s": 0.94, "v": 0.96, "hex": "#f55d0f"},
+    {"name": "Cobalt Blue", "h": 220, "s": 0.86, "v": 0.90, "hex": "#2058e6"},
+    {"name": "Matcha Cream", "h": 85, "s": 0.65, "v": 0.82, "hex": "#8fc24a"},
+    {"name": "Sunset Coral", "h": 10, "s": 0.75, "v": 0.98, "hex": "#fa5b3f"},
+    {"name": "Cyber Yellow", "h": 52, "s": 0.96, "v": 0.98, "hex": "#fae30a"},
+    {"name": "Deep Indigo", "h": 245, "s": 0.80, "v": 0.70, "hex": "#2f24b3"},
+    {"name": "Aqua Mint", "h": 165, "s": 0.75, "v": 0.92, "hex": "#3aeab0"},
+    {"name": "Dusty Rose", "h": 335, "s": 0.50, "v": 0.85, "hex": "#d96c99"},
+    {"name": "Golden Honey", "h": 44, "s": 0.82, "v": 0.94, "hex": "#f0bb2b"},
+    {"name": "Ultramarine", "h": 230, "s": 0.92, "v": 0.88, "hex": "#123fe0"},
+    {"name": "Lime Flash", "h": 115, "s": 0.90, "v": 0.95, "hex": "#40f218"},
+    {"name": "Orchid Violet", "h": 290, "s": 0.70, "v": 0.90, "hex": "#c445e6"},
+    {"name": "Blood Orange", "h": 15, "s": 0.95, "v": 0.92, "hex": "#eb3b0c"},
+    {"name": "Cerulean Sky", "h": 198, "s": 0.80, "v": 0.95, "hex": "#30bbf2"},
+    {"name": "Olive Grove", "h": 70, "s": 0.72, "v": 0.65, "hex": "#8ba62e"},
+    {"name": "Grape Soda", "h": 280, "s": 0.85, "v": 0.78, "hex": "#871ec7"},
+    {"name": "Flamingo Pink", "h": 328, "s": 0.68, "v": 0.95, "hex": "#f24da3"},
+    {"name": "Teal Lagoon", "h": 175, "s": 0.85, "v": 0.80, "hex": "#1eccb0"},
 ]
 
 TARGET_PITCHES = [
-    {"name": "Middle C (C4)", "freq": 261.63},
-    {"name": "Concert A (A4)", "freq": 440.00},
-    {"name": "Golden E (E4)", "freq": 329.63},
-    {"name": "Deep F (F3)", "freq": 174.61},
-    {"name": "Bright D (D5)", "freq": 587.33},
-    {"name": "Low G (G3)", "freq": 196.00},
+    {"name": "Tenor C (C3)", "note": "C3", "freq": 130.81},
+    {"name": "Deep F (F3)", "note": "F3", "freq": 174.61},
+    {"name": "Low G (G3)", "note": "G3", "freq": 196.00},
+    {"name": "Middle C (C4)", "note": "C4", "freq": 261.63},
+    {"name": "D in Octave 4 (D4)", "note": "D4", "freq": 293.66},
+    {"name": "Golden E (E4)", "note": "E4", "freq": 329.63},
+    {"name": "Bright F (F4)", "note": "F4", "freq": 349.23},
+    {"name": "Concert G (G4)", "note": "G4", "freq": 392.00},
+    {"name": "Concert A (A4)", "note": "A4", "freq": 440.00},
+    {"name": "Warm B (B4)", "note": "B4", "freq": 493.88},
+    {"name": "High C (C5)", "note": "C5", "freq": 523.25},
+    {"name": "Bright D (D5)", "note": "D5", "freq": 587.33},
 ]
 
 
@@ -37,7 +59,13 @@ def hsv_to_cone(h: float, s: float, v: float) -> tuple[float, float, float]:
 
 def calculate_color_score(target_hsv: Dict[str, float], guess_hsv: Dict[str, float]) -> float:
     t_x, t_y, t_z = hsv_to_cone(target_hsv["h"], target_hsv["s"], target_hsv["v"])
-    g_x, g_y, g_z = hsv_to_cone(guess_hsv.get("h", 0), guess_hsv.get("s", 1.0), guess_hsv.get("v", 1.0))
+    s_val = float(guess_hsv.get("s", 1.0))
+    if s_val > 1.0:
+        s_val = s_val / 100.0
+    v_val = float(guess_hsv.get("v", 1.0))
+    if v_val > 1.0:
+        v_val = v_val / 100.0
+    g_x, g_y, g_z = hsv_to_cone(guess_hsv.get("h", 0), s_val, v_val)
     dist = math.sqrt((t_x - g_x) ** 2 + (t_y - g_y) ** 2 + (t_z - g_z) ** 2) * 100.0
     return max(0.0, round(100.0 - dist, 1))
 

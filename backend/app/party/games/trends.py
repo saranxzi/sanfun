@@ -46,6 +46,86 @@ TREND_COMPARISONS = [
         "item_b": {"name": "Spotify", "volume": 42000000, "icon": "🎧"},
         "relation": "LOWER"  # 42M < 88M
     },
+    {
+        "item_a": {"name": "YouTube", "volume": 182000000, "icon": "📺"},
+        "item_b": {"name": "Facebook", "volume": 151000000, "icon": "👥"},
+        "relation": "LOWER"  # 151M < 182M
+    },
+    {
+        "item_a": {"name": "Batman", "volume": 11200000, "icon": "🦇"},
+        "item_b": {"name": "Spider-Man", "volume": 16500000, "icon": "🕷️"},
+        "relation": "HIGHER"  # 16.5M > 11.2M
+    },
+    {
+        "item_a": {"name": "Cristiano Ronaldo", "volume": 55000000, "icon": "🏆"},
+        "item_b": {"name": "LeBron James", "volume": 18400000, "icon": "🏀"},
+        "relation": "LOWER"  # 18.4M < 55M
+    },
+    {
+        "item_a": {"name": "Grand Theft Auto", "volume": 19500000, "icon": "🚗"},
+        "item_b": {"name": "Call of Duty", "volume": 13800000, "icon": "🎯"},
+        "relation": "LOWER"  # 13.8M < 19.5M
+    },
+    {
+        "item_a": {"name": "Reddit", "volume": 85000000, "icon": "👽"},
+        "item_b": {"name": "Wikipedia", "volume": 68000000, "icon": "📚"},
+        "relation": "LOWER"  # 68M < 85M
+    },
+    {
+        "item_a": {"name": "Disneyland", "volume": 6100000, "icon": "🏰"},
+        "item_b": {"name": "Universal Studios", "volume": 3900000, "icon": "🎢"},
+        "relation": "LOWER"  # 3.9M < 6.1M
+    },
+    {
+        "item_a": {"name": "Amazon", "volume": 125000000, "icon": "📦"},
+        "item_b": {"name": "eBay", "volume": 41000000, "icon": "🏷️"},
+        "relation": "LOWER"  # 41M < 125M
+    },
+    {
+        "item_a": {"name": "Coca-Cola", "volume": 5800000, "icon": "🥤"},
+        "item_b": {"name": "Pepsi", "volume": 3200000, "icon": "🥫"},
+        "relation": "LOWER"  # 3.2M < 5.8M
+    },
+    {
+        "item_a": {"name": "Pokemon", "volume": 33000000, "icon": "⚡"},
+        "item_b": {"name": "Roblox", "volume": 49000000, "icon": "🧱"},
+        "relation": "HIGHER"  # 49M > 33M
+    },
+    {
+        "item_a": {"name": "Harry Potter", "volume": 14500000, "icon": "⚡"},
+        "item_b": {"name": "Lord of the Rings", "volume": 8200000, "icon": "💍"},
+        "relation": "LOWER"  # 8.2M < 14.5M
+    },
+    {
+        "item_a": {"name": "Coffee", "volume": 9100000, "icon": "☕"},
+        "item_b": {"name": "Tea", "volume": 6400000, "icon": "🍵"},
+        "relation": "LOWER"  # 6.4M < 9.1M
+    },
+    {
+        "item_a": {"name": "Tesla", "volume": 21000000, "icon": "⚡"},
+        "item_b": {"name": "BMW", "volume": 25500000, "icon": "🚘"},
+        "relation": "HIGHER"  # 25.5M > 21M
+    },
+    {
+        "item_a": {"name": "Instagram", "volume": 140000000, "icon": "📸"},
+        "item_b": {"name": "TikTok", "volume": 115000000, "icon": "🎵"},
+        "relation": "LOWER"  # 115M < 140M
+    },
+    {
+        "item_a": {"name": "Super Mario", "volume": 12800000, "icon": "🍄"},
+        "item_b": {"name": "Sonic the Hedgehog", "volume": 7900000, "icon": "🦔"},
+        "relation": "LOWER"  # 7.9M < 12.8M
+    },
+    {
+        "item_a": {"name": "Guitar", "volume": 5200000, "icon": "🎸"},
+        "item_b": {"name": "Piano", "volume": 7100000, "icon": "🎹"},
+        "relation": "HIGHER"  # 7.1M > 5.2M
+    },
+    {
+        "item_a": {"name": "Burger King", "volume": 9400000, "icon": "🍔"},
+        "item_b": {"name": "McDonald's", "volume": 28000000, "icon": "🍟"},
+        "relation": "HIGHER"  # 28M > 9.4M
+    },
 ]
 
 

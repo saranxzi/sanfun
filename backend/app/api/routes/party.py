@@ -167,10 +167,44 @@ async def party_websocket(
                 elif msg_type == ClientMessageType.KICK_PLAYER.value:
                     target_pid = data.get("target_player_id")
                     if target_pid:
-                        room.kick_player(target_pid)
-                        await room.broadcast_room_state()
+                        await room.kick_player(target_pid)
+
+                elif msg_type == ClientMessageType.PROMOTE_HOST.value:
+                    target_pid = data.get("target_player_id")
+                    if target_pid:
+                        await room.promote_host(target_pid)
 
             elif role == "player" and player_id:
+                p_info = room.players.get(player_id)
+                if p_info and p_info.is_host:
+                    if msg_type == ClientMessageType.SELECT_GAME.value:
+                        game_id = data.get("game_id")
+                        if game_id:
+                            room.selected_game_id = game_id
+                            await room.broadcast_room_state()
+                        continue
+                    elif msg_type == ClientMessageType.START_GAME.value:
+                        success = await room.start_game()
+                        if not success:
+                            await websocket.send_json({
+                                "type": ServerMessageType.ERROR.value,
+                                "payload": {"message": "Not enough players to start this game."}
+                            })
+                        continue
+                    elif msg_type == ClientMessageType.BACK_TO_LOBBY.value:
+                        await room.back_to_lobby()
+                        continue
+                    elif msg_type == ClientMessageType.KICK_PLAYER.value:
+                        target_pid = data.get("target_player_id")
+                        if target_pid:
+                            await room.kick_player(target_pid)
+                        continue
+                    elif msg_type == ClientMessageType.PROMOTE_HOST.value:
+                        target_pid = data.get("target_player_id")
+                        if target_pid:
+                            await room.promote_host(target_pid)
+                        continue
+
                 if msg_type == ClientMessageType.GAME_ACTION.value:
                     if room.state == "IN_GAME" and room.game_instance:
                         action = data.get("action")
