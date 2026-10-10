@@ -225,6 +225,33 @@ public class ImposterGame extends BasePartyGame {
     }
 
     @Override
+    public synchronized void onPlayerDisconnect(String playerId) {
+        super.onPlayerDisconnect(playerId);
+        if (imposterIds.contains(playerId) && !isOver && !"INIT".equals(phase) && !"GAME_OVER".equals(phase)) {
+            boolean hasConnectedImposter = false;
+            for (String imp : imposterIds) {
+                PlayerInfo p = players.get(imp);
+                if (p != null && p.isConnected()) {
+                    hasConnectedImposter = true;
+                    break;
+                }
+            }
+            if (!hasConnectedImposter) {
+                phase = "GAME_OVER";
+                isOver = true;
+                winner = "CREW";
+            }
+        }
+    }
+
+    public String getSecretWord() { return secretWord; }
+    public String getWinner() { return winner; }
+    public Map<String, String> getVotes() { return votes; }
+    public String getVotedOutId() { return votedOutId; }
+    public void setPhase(String phase) { this.phase = phase; }
+    public void resolveVotingForTest() { resolveVoting(); }
+
+    @Override
     public synchronized Map<String, Object> handleAction(String playerId, String action, Map<String, Object> data) {
         if (data == null) data = Collections.emptyMap();
 

@@ -73,6 +73,7 @@ public class DialedGame extends BasePartyGame {
     }
 
     public static double calculateColorScore(TargetColor target, Map<String, Object> guess) {
+        if (target == null) return 0.0;
         double[] t = hsvToCone(target.h(), target.s(), target.v());
 
         double gh = 0.0;
@@ -99,8 +100,28 @@ public class DialedGame extends BasePartyGame {
         return Math.max(0.0, Math.round((100.0 - dist) * 10.0) / 10.0);
     }
 
+    @SuppressWarnings("unchecked")
+    public static double calculateColorScore(Map<String, ?> targetHsv, Map<String, ?> guessHsv) {
+        if (targetHsv == null) return 0.0;
+        double th = 0.0, ts = 1.0, tv = 1.0;
+        if (targetHsv.get("h") instanceof Number n) th = n.doubleValue();
+        if (targetHsv.get("s") instanceof Number n) {
+            ts = n.doubleValue();
+            if (ts > 1.0) ts /= 100.0;
+        }
+        if (targetHsv.get("v") instanceof Number n) {
+            tv = n.doubleValue();
+            if (tv > 1.0) tv /= 100.0;
+        }
+        return calculateColorScore(new TargetColor("Custom", th, ts, tv, ""), (Map<String, Object>) guessHsv);
+    }
+
     public static double calculatePitchScore(double targetFreq, double guessFreq) {
-        if (guessFreq <= 0 || targetFreq <= 0) return 0.0;
+        if (Double.isNaN(guessFreq) || Double.isInfinite(guessFreq) ||
+            Double.isNaN(targetFreq) || Double.isInfinite(targetFreq) ||
+            guessFreq <= 0 || targetFreq <= 0) {
+            return 0.0;
+        }
         double cents = 1200.0 * Math.abs(Math.log(guessFreq / targetFreq) / Math.log(2.0));
         return Math.max(0.0, Math.round((100.0 - (cents / 12.0)) * 10.0) / 10.0);
     }

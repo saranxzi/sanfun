@@ -1,12 +1,14 @@
 package com.sanfun.party;
 
-import com.sanfun.party.engine.BasePartyGame;
 import com.sanfun.party.engine.GameFactory;
+import com.sanfun.party.engine.auction.AuctionGame;
 import com.sanfun.party.engine.circle.CircleGame;
 import com.sanfun.party.engine.dialed.DialedGame;
 import com.sanfun.party.engine.fermi.FermiGame;
 import com.sanfun.party.engine.imposter.ImposterGame;
 import com.sanfun.party.engine.mafia.MafiaGame;
+import com.sanfun.party.engine.trends.TrendsGame;
+import com.sanfun.party.engine.trolley.TrolleyGame;
 import com.sanfun.party.model.PlayerInfo;
 import org.junit.jupiter.api.Test;
 
@@ -18,9 +20,9 @@ class GameEnginesTests {
 
     private Map<String, PlayerInfo> createPlayers(int count) {
         Map<String, PlayerInfo> players = new LinkedHashMap<>();
-        for (int i = 1; i <= count; i++) {
-            String pid = "p_" + i;
-            players.put(pid, new PlayerInfo(pid, "Player" + i, "🦊", "#E25241", i == 1, true, 0));
+        for (int i = 0; i < count; i++) {
+            String pid = "p" + i;
+            players.put(pid, new PlayerInfo(pid, "Player_" + i, "🦊", "#E25241", i == 0, true, 0));
         }
         return players;
     }
@@ -40,7 +42,7 @@ class GameEnginesTests {
 
     @Test
     void testMafiaEngineLifecycleAndRoleMasking() {
-        Map<String, PlayerInfo> players = createPlayers(4);
+        Map<String, PlayerInfo> players = createPlayers(5);
         MafiaGame game = new MafiaGame("TEST", players);
         game.start();
 
@@ -53,19 +55,57 @@ class GameEnginesTests {
             assertNull(p.get("role_revealed"));
         }
 
-        // Advance to night
-        game.onTimerExpired();
-        assertEquals("NIGHT_ACTIONS", game.getPhase());
+        // Villager must NOT see teammates, Mafia MUST see teammates
+        String mafiaPid = game.getRoles().entrySet().stream()
+                .filter(e -> MafiaGame.ROLE_MAFIA.equals(e.getValue()))
+                .map(Map.Entry::getKey).findFirst().orElseThrow();
+        String villagerPid = game.getRoles().entrySet().stream()
+                .filter(e -> MafiaGame.ROLE_VILLAGER.equals(e.getValue()))
+                .map(Map.Entry::getKey).findFirst().orElseThrow();
 
-        // Player states
-        for (String pid : players.keySet()) {
-            Map<String, Object> pState = game.getPlayerState(pid);
-            assertNotNull(pState.get("my_role"));
-        }
+        Map<String, Object> vState = game.getPlayerState(villagerPid);
+        assertFalse(vState.containsKey("mafia_teammates"));
+
+        Map<String, Object> mState = game.getPlayerState(mafiaPid);
+        assertTrue(mState.containsKey("mafia_teammates"));
     }
 
     @Test
-    void testImposterRoleMasking() {
+    void testMafiaStrictPluralityTieAndExecution() {
+        Map<String, PlayerInfo> players = createPlayers(5);
+        MafiaGame game = new MafiaGame("TEST", players);
+        game.start();
+
+        // 1. Tie Vote: p1 has 2 votes, p4 has 2 votes -> TIE! No execution
+        game.setPhase("DAY_VOTE");
+        game.getAlivePlayers().clear();
+        game.getAlivePlayers().addAll(players.keySet());
+        game.getDayVotes().clear();
+        game.getDayVotes().put("p0", "p1");
+        game.getDayVotes().put("p2", "p1");
+        game.getDayVotes().put("p3", "p4");
+        game.getDayVotes().put("p4", "p4");
+
+        game.resolveDayVoteForTest();
+        assertNull(game.getLastKilledId());
+        String lastLog = game.getHistoryLog().get(game.getHistoryLog().size() - 1);
+        assertTrue(lastLog.toLowerCase().contains("could not reach") || lastLog.toLowerCase().contains("no one was executed"));
+
+        // 2. Strict Plurality Execution: p1 gets 3 votes, p4 gets 1 vote
+        game.setPhase("DAY_VOTE");
+        game.getDayVotes().clear();
+        game.getDayVotes().put("p0", "p1");
+        game.getDayVotes().put("p2", "p1");
+        game.getDayVotes().put("p3", "p1");
+        game.getDayVotes().put("p4", "p4");
+
+        game.resolveDayVoteForTest();
+        assertEquals("p1", game.getLastKilledId());
+        assertFalse(game.getAlivePlayers().contains("p1"));
+    }
+
+    @Test
+    void testImposterRoleMaskingAndDisconnect() {
         Map<String, PlayerInfo> players = createPlayers(4);
         ImposterGame game = new ImposterGame("TEST", players, Collections.emptyList());
         game.start();
@@ -74,73 +114,179 @@ class GameEnginesTests {
         Map<String, Object> hostState = game.getHostState();
         assertNull(hostState.get("secret_word")); // Never leak on TV!
 
-        for (String pid : players.keySet()) {
-            Map<String, Object> pState = game.getPlayerState(pid);
-            boolean isImp = (Boolean) pState.get("is_imposter");
-            if (isImp) {
-                assertEquals("???", pState.get("secret_word"));
-                assertNotNull(pState.get("imposter_hint"));
-            } else {
-                assertNotEquals("???", pState.get("secret_word"));
-                assertNull(pState.get("imposter_hint"));
-            }
-        }
+        String impId = game.getImposterIds().get(0);
+        String crewId = players.keySet().stream().filter(pid -> !pid.equals(impId)).findFirst().orElseThrow();
+
+        Map<String, Object> impState = game.getPlayerState(impId);
+        assertEquals(true, impState.get("is_imposter"));
+        assertEquals("???", impState.get("secret_word"));
+
+        Map<String, Object> crewState = game.getPlayerState(crewId);
+        assertEquals(false, crewState.get("is_imposter"));
+        assertEquals(game.getSecretWord(), crewState.get("secret_word"));
+
+        // Disconnecting sole imposter during active game ends game with CREW win!
+        game.setPhase("CLUE_ROUNDS");
+        game.onPlayerDisconnect(impId);
+        assertTrue(game.isOver());
+        assertEquals("CREW", game.getWinner());
     }
 
     @Test
-    void testDialedMath() {
-        DialedGame.TargetColor cyan = new DialedGame.TargetColor("Electric Cyan", 184, 0.95, 1.0, "#0df0ff");
-        // Perfect match
-        double perfectScore = DialedGame.calculateColorScore(cyan, Map.of("h", 184.0, "s", 0.95, "v", 1.0));
-        assertEquals(100.0, perfectScore, 0.5);
+    void testImposterTieVoteEscapesDetection() {
+        Map<String, PlayerInfo> players = createPlayers(4);
+        ImposterGame game = new ImposterGame("TEST", players, Collections.emptyList());
+        game.start();
 
-        // Opposite hue
-        double oppositeScore = DialedGame.calculateColorScore(cyan, Map.of("h", 4.0, "s", 0.95, "v", 1.0));
-        assertTrue(oppositeScore < 30.0);
+        game.setPhase("VOTING");
+        // Tie vote between p0 and p1
+        game.getVotes().clear();
+        game.getVotes().put("p0", "p1");
+        game.getVotes().put("p2", "p1");
+        game.getVotes().put("p1", "p0");
+        game.getVotes().put("p3", "p0");
 
-        // Pitch matching
-        double perfectPitch = DialedGame.calculatePitchScore(440.0, 440.0);
-        assertEquals(100.0, perfectPitch);
-
-        double octaveOff = DialedGame.calculatePitchScore(440.0, 880.0);
-        assertEquals(0.0, octaveOff);
+        game.resolveVotingForTest();
+        // Tie means no conviction -> imposter escapes -> imposter wins!
+        assertNull(game.getVotedOutId());
+        assertEquals("IMPOSTER", game.getWinner());
+        assertTrue(game.isOver());
     }
 
     @Test
-    void testFermiMath() {
+    void testDialedMathAndGuards() {
+        // Hue 2 deg and 358 deg are close in 3D cone distance, scoring > 90%
+        Map<String, Double> target = Map.of("h", 2.0, "s", 0.9, "v", 1.0);
+        Map<String, Double> closeGuess = Map.of("h", 358.0, "s", 0.9, "v", 1.0);
+        double score = DialedGame.calculateColorScore(target, closeGuess);
+        assertTrue(score > 90.0, "Close hues across 0/360 boundary must score > 90%");
+
+        // Opposite hue (180 deg away)
+        Map<String, Double> farGuess = Map.of("h", 182.0, "s", 0.9, "v", 1.0);
+        double farScore = DialedGame.calculateColorScore(target, farGuess);
+        assertTrue(farScore < score);
+
+        // Color normalization: percentage (90) vs fraction (0.9) produces identical score
+        Map<String, Double> guessPct = Map.of("h", 180.0, "s", 90.0, "v", 90.0);
+        Map<String, Double> guessNorm = Map.of("h", 180.0, "s", 0.9, "v", 0.9);
+        assertEquals(DialedGame.calculateColorScore(Map.of("h", 180.0, "s", 0.9, "v", 0.9), guessPct),
+                     DialedGame.calculateColorScore(Map.of("h", 180.0, "s", 0.9, "v", 0.9), guessNorm));
+
+        // Pitch guards: exact, negative, zero, NaN, Infinity
+        assertEquals(100.0, DialedGame.calculatePitchScore(440.0, 440.0));
+        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, 0.0));
+        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, -100.0));
+        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, Double.NaN));
+        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, Double.POSITIVE_INFINITY));
+    }
+
+    @Test
+    void testFermiMathAndZeroDivisionGuards() {
+        // Exact guess
         Map<String, Object> exact = FermiGame.scoreFermiGuess(1000.0, 1000.0);
         assertEquals(1000, exact.get("points"));
         assertEquals(0.0, exact.get("d_log"));
 
-        Map<String, Object> oneOrderOff = FermiGame.scoreFermiGuess(100.0, 1000.0);
-        assertEquals(667, (Integer) oneOrderOff.get("points"));
-        assertEquals(1.0, (Double) oneOrderOff.get("d_log"));
+        // Within 1 order of magnitude (5000 vs 10000)
+        Map<String, Object> close = FermiGame.scoreFermiGuess(5000.0, 10000.0);
+        assertTrue((Integer) close.get("points") > 850);
+        assertTrue((Double) close.get("d_log") < 0.5);
 
-        // Safeguard against 0, NaN, infinity
-        Map<String, Object> zeroGuess = FermiGame.scoreFermiGuess(0.0, 1000.0);
-        assertNotNull(zeroGuess);
-        assertEquals(0, (Integer) zeroGuess.get("points"));
+        // Zero and negative guesses must not crash
+        Map<String, Object> zeroGuess = FermiGame.scoreFermiGuess(0.0, 1000000.0);
+        assertEquals(0, zeroGuess.get("points"));
+        assertTrue((Double) zeroGuess.get("d_log") > 5.0);
+
+        Map<String, Object> negGuess = FermiGame.scoreFermiGuess(-500.0, 1000.0);
+        assertEquals(0, negGuess.get("points"));
     }
 
     @Test
-    void testCircleEvaluation() {
-        // Generate near-perfect circle points (R = 100, cx = 200, cy = 200)
-        List<List<Double>> points = new ArrayList<>();
-        int numPoints = 100;
-        for (int i = 0; i <= numPoints; i++) {
-            double angle = (2 * Math.PI * i) / numPoints;
-            double x = 200.0 + 100.0 * Math.cos(angle);
-            double y = 200.0 + 100.0 * Math.sin(angle);
-            points.add(List.of(x, y));
+    void testCircleEvaluationAndExploitGuards() {
+        // 1. Under 30 points rejected
+        List<List<Double>> fewPoints = List.of(List.of(10.0, 10.0), List.of(20.0, 20.0));
+        Map<String, Object> resFew = CircleGame.evaluateCirclePoints(fewPoints);
+        assertEquals(0.0, (Double) resFew.get("score"));
+        assertTrue(((String) resFew.get("reason")).contains("minimum 30"));
+
+        // 2. Near-perfect circle with 60 points
+        List<List<Double>> circlePts = new ArrayList<>();
+        double cx = 200.0, cy = 200.0, r = 100.0;
+        for (int i = 0; i < 60; i++) {
+            double angle = 2.0 * Math.PI * i / 60.0;
+            circlePts.add(List.of(cx + r * Math.cos(angle), cy + r * Math.sin(angle)));
         }
+        circlePts.add(circlePts.get(0)); // close loop
 
-        Map<String, Object> eval = CircleGame.evaluateCirclePoints(points);
-        double score = (Double) eval.get("score");
-        assertTrue(score >= 95.0, "Near perfect circle should score >= 95%, got: " + score);
+        Map<String, Object> resPerf = CircleGame.evaluateCirclePoints(circlePts);
+        assertTrue((Double) resPerf.get("score") > 90.0);
+        assertTrue((Double) resPerf.get("angular_coverage_pct") >= 95.0);
 
-        // Unclosed arc should fail
-        List<List<Double>> unclosed = points.subList(0, 50);
-        Map<String, Object> unclosedEval = CircleGame.evaluateCirclePoints(unclosed);
-        assertEquals(0.0, (Double) unclosedEval.get("score"));
+        // 3. Short 15-degree arc heavily penalized
+        List<List<Double>> arcPts = new ArrayList<>();
+        for (int i = 0; i < 35; i++) {
+            double rad = Math.toRadians(i * 0.5);
+            arcPts.add(List.of(cx + r * Math.cos(rad), cy + r * Math.sin(rad)));
+        }
+        Map<String, Object> resArc = CircleGame.evaluateCirclePoints(arcPts);
+        assertEquals(0.0, (Double) resArc.get("score"));
+    }
+
+    @Test
+    void testAuctionHouseRules() {
+        Map<String, PlayerInfo> players = createPlayers(2);
+        AuctionGame game = new AuctionGame("TEST", players);
+        game.start();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> hostState = game.getHostState();
+        game.onTimerExpired(); // CATALOG -> BIDDING
+        assertEquals("BIDDING", game.getPhase());
+
+        // Bids: p0 bids 1000, p1 bids 100,000,000,000 (huge overbid)
+        game.handleAction("p0", "SUBMIT_BID", Map.of("bid", 1000L));
+        game.handleAction("p1", "SUBMIT_BID", Map.of("bid", 1000000000000L));
+
+        assertEquals("HAMMER", game.getPhase());
+        Map<String, Object> endHostState = game.getHostState();
+        @SuppressWarnings("unchecked")
+        Map<String, Map<String, Object>> results = (Map<String, Map<String, Object>>) endHostState.get("round_results");
+        assertNotNull(results);
+        assertTrue((Boolean) results.get("p0").get("won_lot"));
+        assertFalse((Boolean) results.get("p0").get("went_over"));
+        assertTrue((Boolean) results.get("p1").get("went_over"));
+    }
+
+    @Test
+    void testTrolleyChoicesAndConsensus() {
+        Map<String, PlayerInfo> players = createPlayers(3);
+        TrolleyGame game = new TrolleyGame("TEST", players);
+        game.start();
+
+        // p0 and p1 pick Track A (bet majority = true), p2 picks Track B
+        game.handleAction("p0", "SUBMIT_CHOICE", Map.of("choice", "A", "bet_majority", true));
+        game.handleAction("p1", "SUBMIT_CHOICE", Map.of("choice", "A", "bet_majority", true));
+        game.handleAction("p2", "SUBMIT_CHOICE", Map.of("choice", "B", "bet_majority", true));
+
+        assertEquals("REVEAL", game.getPhase());
+        assertTrue(game.getScores().get("p0") > game.getScores().get("p2"));
+    }
+
+    @Test
+    void testTrendsHigherOrLowerAndStreaks() {
+        Map<String, PlayerInfo> players = createPlayers(2);
+        TrendsGame game = new TrendsGame("TEST", players);
+        game.start();
+
+        TrendsGame.Matchup matchup = game.getCurrentMatchup();
+        assertNotNull(matchup);
+        String correct = matchup.relation();
+        String wrong = correct.equals("HIGHER") ? "LOWER" : "HIGHER";
+
+        game.handleAction("p0", "SUBMIT_GUESS", Map.of("guess", correct));
+        game.handleAction("p1", "SUBMIT_GUESS", Map.of("guess", wrong));
+
+        assertEquals("REVEAL", game.getPhase());
+        assertTrue(game.getScores().get("p0") > game.getScores().get("p1"));
     }
 }

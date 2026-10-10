@@ -92,7 +92,7 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
   };
 
   const submitCircle = () => {
-    if (points.length < 20) return;
+    if (points.length < 30) return;
     setSubmitted(true);
     soundEngine.playDing();
     onSendAction('SUBMIT_CIRCLE', { points });
@@ -150,11 +150,17 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
             <button
               type="button"
               onClick={submitCircle}
-              disabled={submitted || points.length < 25}
+              disabled={submitted || points.length < 30}
               className="retro-btn flex-1 bg-arcade-cobalt text-white rounded-xl text-base uppercase flex items-center justify-center gap-2"
             >
               <Check size={18} />
-              <span>{submitted ? 'Submitted ✓' : 'Submit Circle'}</span>
+              <span>
+                {submitted
+                  ? 'Submitted ✓'
+                  : points.length < 30 && points.length > 0
+                  ? `Need More (${points.length}/30)`
+                  : 'Submit Circle'}
+              </span>
             </button>
           </div>
         </div>

@@ -44,6 +44,8 @@ public class TrendsGame extends BasePartyGame {
     private final List<Integer> usedIndices = new ArrayList<>();
     private volatile String winner = null;
 
+    public Matchup getCurrentMatchup() { return currentMatchup; }
+
     public TrendsGame(String roomCode, Map<String, PlayerInfo> players) {
         super(GAME_ID, GAME_NAME, GAME_TAGLINE, GAME_DESCRIPTION, GAME_ICON,
                 MIN_PLAYERS, MAX_PLAYERS, roomCode, players);

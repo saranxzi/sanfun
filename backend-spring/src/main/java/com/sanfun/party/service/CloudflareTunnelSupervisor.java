@@ -75,7 +75,10 @@ public class CloudflareTunnelSupervisor {
 
     @PostConstruct
     public void start() {
-        if ("1".equals(System.getenv("TESTING")) || "true".equalsIgnoreCase(System.getProperty("test"))) {
+        if (port <= 0 ||
+                "1".equals(System.getenv("TESTING")) ||
+                System.getProperty("surefire.test.class.path") != null ||
+                System.getProperty("test") != null) {
             return;
         }
 

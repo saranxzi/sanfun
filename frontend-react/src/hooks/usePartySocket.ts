@@ -88,6 +88,9 @@ export function usePartySocket({
               prevPlayerCountRef.current = payload.player_count;
             } else if (payload.state === 'IN_GAME') {
               setHostGameState(payload);
+              if (payload.phase_timer !== undefined) {
+                setPhaseTimer(payload.phase_timer);
+              }
             }
             break;
           }
@@ -122,6 +125,9 @@ export function usePartySocket({
               soundEngine.playDing();
             } else if (payload.event === 'PLAYER_KICKED') {
               soundEngine.playLeave();
+            } else if (payload.event === 'PROMOTED_TO_HOST') {
+              setPlayerGameState((prev) => (prev ? { ...prev, is_host: true } : prev));
+              soundEngine.playDing();
             }
             onGameEvent?.(payload);
             break;

@@ -11,6 +11,8 @@
     "dev:spring": "cd backend-spring && .\\mvnw.cmd spring-boot:run",
     "build": "npm run build:react",
     "build:react": "npm run --prefix frontend-react build",
+    "test": "npm run test:spring && npm run test:react",
+    "test:react": "npm run --prefix frontend-react test",
     "test:spring": "cd backend-spring && .\\mvnw.cmd test",
     "build:spring": "cd backend-spring && .\\mvnw.cmd package -DskipTests",
     "install:all": "npm install --prefix frontend-react && npm install --prefix frontend"

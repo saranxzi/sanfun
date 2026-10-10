@@ -59,6 +59,9 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        session.setTextMessageSizeLimit(512 * 1024);
+        session.setBinaryMessageSizeLimit(512 * 1024);
+
         URI uri = session.getUri();
         String code = extractRoomCode(uri);
         Map<String, String> query = parseQueryParams(uri);
@@ -86,7 +89,11 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
             }
             room.setHostSocket(session);
             room.touch();
-            room.broadcastRoomState();
+            if ("LOBBY".equals(room.getState())) {
+                room.broadcastRoomState();
+            } else {
+                room.broadcastGameState();
+            }
         } else {
             room.touch();
             PlayerInfo player = null;
@@ -109,13 +116,15 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
             session.getAttributes().put("player_id", pid);
             room.getPlayerSockets().put(pid, session);
 
-            // Send welcome player state
+            // Send welcome player state with is_host and current cumulative score
             Map<String, Object> welcome = new LinkedHashMap<>();
             welcome.put("player_id", player.getId());
             welcome.put("session_token", activeSessionToken);
             welcome.put("nickname", player.getNickname());
             welcome.put("avatar", player.getAvatar());
             welcome.put("color", player.getColor());
+            welcome.put("is_host", player.isHost());
+            welcome.put("score", player.getScore());
             welcome.put("room_code", room.getCode());
             welcome.put("state", room.getState());
 
@@ -142,7 +151,9 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
         if (room == null) return;
         room.touch();
 
-        String msgType = (String) data.get("type");
+        String rawType = (String) data.get("type");
+        if (rawType == null) return;
+        String msgType = rawType.toUpperCase().trim();
         if (ClientMessageType.PING.name().equals(msgType)) {
             room.sendJsonSafe(session, ServerMessageType.PONG, Collections.emptyMap());
             return;

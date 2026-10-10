@@ -219,6 +219,14 @@ public class MafiaGame extends BasePartyGame {
         roundNumber++;
     }
 
+    public Map<String, String> getRoles() { return roles; }
+    public Set<String> getAlivePlayers() { return alivePlayers; }
+    public Map<String, String> getDayVotes() { return dayVotes; }
+    public String getLastKilledId() { return lastKilledId; }
+    public List<String> getHistoryLog() { return historyLog; }
+    public void setPhase(String phase) { this.phase = phase; }
+    public void resolveDayVoteForTest() { resolveDayVote(); }
+
     private boolean checkWinCondition() {
         List<String> aliveMafia = new ArrayList<>();
         List<String> aliveTown = new ArrayList<>();
