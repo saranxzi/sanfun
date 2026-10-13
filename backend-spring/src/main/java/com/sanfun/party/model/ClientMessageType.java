@@ -9,5 +9,8 @@ public enum ClientMessageType {
     GAME_ACTION,
     KICK_PLAYER,
     PROMOTE_HOST,
+    CLEAR_SCORES,
+    UPDATE_SETTINGS,
+    SKIP_PHASE,
     PING
 }

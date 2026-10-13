@@ -52,8 +52,27 @@ public abstract class BasePartyGame {
     public double getPhaseTimer() { return phaseTimer; }
     public int getRoundNumber() { return roundNumber; }
     public int getMaxRounds() { return maxRounds; }
-    public Map<String, Integer> getScores() { return scores; }
-    public boolean isOver() { return isOver; }
+    public void setMaxRounds(int maxRounds) {
+        if (maxRounds > 0) {
+            this.maxRounds = maxRounds;
+        }
+    }
+
+    public Map<String, Integer> getScores() {
+        return scores;
+    }
+
+    public boolean isOver() {
+        return isOver;
+    }
+
+    public synchronized String skipPhase() {
+        if (this.phaseTimer > 0) {
+            this.phaseTimer = 0.0;
+            return onTimerExpired();
+        }
+        return null;
+    }
 
     public abstract void start();
 

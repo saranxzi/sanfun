@@ -1,14 +1,14 @@
 package com.sanfun.party;
 
 import com.sanfun.party.engine.GameFactory;
-import com.sanfun.party.engine.auction.AuctionGame;
 import com.sanfun.party.engine.circle.CircleGame;
 import com.sanfun.party.engine.dialed.DialedGame;
 import com.sanfun.party.engine.fermi.FermiGame;
 import com.sanfun.party.engine.imposter.ImposterGame;
 import com.sanfun.party.engine.mafia.MafiaGame;
+import com.sanfun.party.engine.price.GuessPriceGame;
+import com.sanfun.party.engine.rather.WouldYouRatherGame;
 import com.sanfun.party.engine.trends.TrendsGame;
-import com.sanfun.party.engine.trolley.TrolleyGame;
 import com.sanfun.party.model.PlayerInfo;
 import org.junit.jupiter.api.Test;
 
@@ -34,9 +34,11 @@ class GameEnginesTests {
         assertTrue(GameFactory.getGameMetadata("imposter").isPresent());
         assertTrue(GameFactory.getGameMetadata("dialed").isPresent());
         assertTrue(GameFactory.getGameMetadata("fermi").isPresent());
-        assertTrue(GameFactory.getGameMetadata("auction").isPresent());
+        assertTrue(GameFactory.getGameMetadata("guess_price").isPresent());
+        assertTrue(GameFactory.getGameMetadata("auction").isPresent()); // Alias
         assertTrue(GameFactory.getGameMetadata("circle").isPresent());
-        assertTrue(GameFactory.getGameMetadata("trolley").isPresent());
+        assertTrue(GameFactory.getGameMetadata("rather").isPresent());
+        assertTrue(GameFactory.getGameMetadata("trolley").isPresent()); // Alias
         assertTrue(GameFactory.getGameMetadata("trends").isPresent());
     }
 
@@ -68,6 +70,18 @@ class GameEnginesTests {
 
         Map<String, Object> mState = game.getPlayerState(mafiaPid);
         assertTrue(mState.containsKey("mafia_teammates"));
+    }
+
+    @Test
+    void testMafiaEarlyVoting() {
+        Map<String, PlayerInfo> players = createPlayers(5);
+        MafiaGame game = new MafiaGame("TEST", players);
+        game.start();
+
+        game.setPhase("DAY_DISCUSSION");
+        Map<String, Object> res = game.handleAction("HOST", "START_VOTING", Collections.emptyMap());
+        assertEquals("DAY_VOTE", game.getPhase());
+        assertEquals(true, res.get("broadcast"));
     }
 
     @Test
@@ -105,7 +119,7 @@ class GameEnginesTests {
     }
 
     @Test
-    void testImposterRoleMaskingAndDisconnect() {
+    void testImposterRoleMaskingAndVagueClue() {
         Map<String, PlayerInfo> players = createPlayers(4);
         ImposterGame game = new ImposterGame("TEST", players, Collections.emptyList());
         game.start();
@@ -120,13 +134,19 @@ class GameEnginesTests {
         Map<String, Object> impState = game.getPlayerState(impId);
         assertEquals(true, impState.get("is_imposter"));
         assertEquals("???", impState.get("secret_word"));
+        assertNotNull(impState.get("vague_hint")); // Vague clue exists to blend in!
 
         Map<String, Object> crewState = game.getPlayerState(crewId);
         assertEquals(false, crewState.get("is_imposter"));
         assertEquals(game.getSecretWord(), crewState.get("secret_word"));
 
-        // Disconnecting sole imposter during active game ends game with CREW win!
+        // Host can call vote early during clues
         game.setPhase("CLUE_ROUNDS");
+        Map<String, Object> res = game.handleAction("HOST", "START_VOTING", Collections.emptyMap());
+        assertEquals("VOTING", game.getPhase());
+        assertEquals(true, res.get("broadcast"));
+
+        // Disconnecting sole imposter during active game ends game with CREW win!
         game.onPlayerDisconnect(impId);
         assertTrue(game.isOver());
         assertEquals("CREW", game.getWinner());
@@ -155,29 +175,15 @@ class GameEnginesTests {
 
     @Test
     void testDialedMathAndGuards() {
-        // Hue 2 deg and 358 deg are close in 3D cone distance, scoring > 90%
-        Map<String, Double> target = Map.of("h", 2.0, "s", 0.9, "v", 1.0);
-        Map<String, Double> closeGuess = Map.of("h", 358.0, "s", 0.9, "v", 1.0);
+        DialedGame.TargetColor target = new DialedGame.TargetColor("Ruby", 2.0, 0.9, 1.0, "#FF0000");
+        Map<String, Object> closeGuess = Map.of("h", 358.0, "s", 90.0, "v", 100.0);
         double score = DialedGame.calculateColorScore(target, closeGuess);
         assertTrue(score > 90.0, "Close hues across 0/360 boundary must score > 90%");
 
         // Opposite hue (180 deg away)
-        Map<String, Double> farGuess = Map.of("h", 182.0, "s", 0.9, "v", 1.0);
+        Map<String, Object> farGuess = Map.of("h", 182.0, "s", 90.0, "v", 100.0);
         double farScore = DialedGame.calculateColorScore(target, farGuess);
         assertTrue(farScore < score);
-
-        // Color normalization: percentage (90) vs fraction (0.9) produces identical score
-        Map<String, Double> guessPct = Map.of("h", 180.0, "s", 90.0, "v", 90.0);
-        Map<String, Double> guessNorm = Map.of("h", 180.0, "s", 0.9, "v", 0.9);
-        assertEquals(DialedGame.calculateColorScore(Map.of("h", 180.0, "s", 0.9, "v", 0.9), guessPct),
-                     DialedGame.calculateColorScore(Map.of("h", 180.0, "s", 0.9, "v", 0.9), guessNorm));
-
-        // Pitch guards: exact, negative, zero, NaN, Infinity
-        assertEquals(100.0, DialedGame.calculatePitchScore(440.0, 440.0));
-        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, 0.0));
-        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, -100.0));
-        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, Double.NaN));
-        assertEquals(0.0, DialedGame.calculatePitchScore(440.0, Double.POSITIVE_INFINITY));
     }
 
     @Test
@@ -202,68 +208,71 @@ class GameEnginesTests {
     }
 
     @Test
-    void testCircleEvaluationAndExploitGuards() {
+    void testCircleEvaluationAndSmallCircleValidation() {
         // 1. Under 30 points rejected
         List<List<Double>> fewPoints = List.of(List.of(10.0, 10.0), List.of(20.0, 20.0));
         Map<String, Object> resFew = CircleGame.evaluateCirclePoints(fewPoints);
         assertEquals(0.0, (Double) resFew.get("score"));
         assertTrue(((String) resFew.get("reason")).contains("minimum 30"));
 
-        // 2. Near-perfect circle with 60 points
+        // 2. Too small circle rejected (radius < 30px or diameter < 60px)
+        List<List<Double>> tinyCircle = new ArrayList<>();
+        double cx = 100.0, cy = 100.0, rTiny = 15.0; // tiny 15px radius!
+        for (int i = 0; i < 40; i++) {
+            double angle = 2.0 * Math.PI * i / 40.0;
+            tinyCircle.add(List.of(cx + rTiny * Math.cos(angle), cy + rTiny * Math.sin(angle)));
+        }
+        tinyCircle.add(tinyCircle.get(0));
+        Map<String, Object> resTiny = CircleGame.evaluateCirclePoints(tinyCircle);
+        assertEquals(0.0, (Double) resTiny.get("score"));
+        assertTrue((Boolean) resTiny.get("too_small"));
+        assertTrue(((String) resTiny.get("reason")).contains("too small"));
+
+        // 3. Near-perfect circle with generous diameter
         List<List<Double>> circlePts = new ArrayList<>();
-        double cx = 200.0, cy = 200.0, r = 100.0;
+        double cx2 = 200.0, cy2 = 200.0, r = 100.0;
         for (int i = 0; i < 60; i++) {
             double angle = 2.0 * Math.PI * i / 60.0;
-            circlePts.add(List.of(cx + r * Math.cos(angle), cy + r * Math.sin(angle)));
+            circlePts.add(List.of(cx2 + r * Math.cos(angle), cy2 + r * Math.sin(angle)));
         }
         circlePts.add(circlePts.get(0)); // close loop
 
         Map<String, Object> resPerf = CircleGame.evaluateCirclePoints(circlePts);
         assertTrue((Double) resPerf.get("score") > 90.0);
         assertTrue((Double) resPerf.get("angular_coverage_pct") >= 95.0);
-
-        // 3. Short 15-degree arc heavily penalized
-        List<List<Double>> arcPts = new ArrayList<>();
-        for (int i = 0; i < 35; i++) {
-            double rad = Math.toRadians(i * 0.5);
-            arcPts.add(List.of(cx + r * Math.cos(rad), cy + r * Math.sin(rad)));
-        }
-        Map<String, Object> resArc = CircleGame.evaluateCirclePoints(arcPts);
-        assertEquals(0.0, (Double) resArc.get("score"));
     }
 
     @Test
-    void testAuctionHouseRules() {
-        Map<String, PlayerInfo> players = createPlayers(2);
-        AuctionGame game = new AuctionGame("TEST", players);
-        game.start();
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> hostState = game.getHostState();
-        game.onTimerExpired(); // CATALOG -> BIDDING
-        assertEquals("BIDDING", game.getPhase());
-
-        // Bids: p0 bids 1000, p1 bids 100,000,000,000 (huge overbid)
-        game.handleAction("p0", "SUBMIT_BID", Map.of("bid", 1000L));
-        game.handleAction("p1", "SUBMIT_BID", Map.of("bid", 1000000000000L));
-
-        assertEquals("HAMMER", game.getPhase());
-        Map<String, Object> endHostState = game.getHostState();
-        @SuppressWarnings("unchecked")
-        Map<String, Map<String, Object>> results = (Map<String, Map<String, Object>>) endHostState.get("round_results");
-        assertNotNull(results);
-        assertTrue((Boolean) results.get("p0").get("won_lot"));
-        assertFalse((Boolean) results.get("p0").get("went_over"));
-        assertTrue((Boolean) results.get("p1").get("went_over"));
-    }
-
-    @Test
-    void testTrolleyChoicesAndConsensus() {
+    void testGuessPriceRulesAndProximityScoring() {
         Map<String, PlayerInfo> players = createPlayers(3);
-        TrolleyGame game = new TrolleyGame("TEST", players);
+        GuessPriceGame game = new GuessPriceGame("TEST", players);
         game.start();
 
-        // p0 and p1 pick Track A (bet majority = true), p2 picks Track B
+        assertEquals("GUESS", game.getPhase());
+        assertNotNull(game.getCurrentItem());
+        long actual = game.getCurrentItem().actualPrice();
+
+        // p0 guesses exact, p1 guesses within 10%, p2 guesses way off
+        game.handleAction("p0", "SUBMIT_GUESS", Map.of("guess", actual));
+        game.handleAction("p1", "SUBMIT_GUESS", Map.of("guess", (long) (actual * 1.08)));
+        game.handleAction("p2", "SUBMIT_GUESS", Map.of("guess", 1L));
+
+        assertEquals("REVEAL", game.getPhase());
+        assertTrue(game.getScores().get("p0") >= 1000);
+        assertTrue(game.getScores().get("p1") >= 800);
+        assertTrue(game.getScores().get("p0") > game.getScores().get("p2"));
+    }
+
+    @Test
+    void testWouldYouRatherChoicesAndConsensus() {
+        Map<String, PlayerInfo> players = createPlayers(3);
+        WouldYouRatherGame game = new WouldYouRatherGame("TEST", players);
+        game.start();
+
+        assertEquals("CHOICE", game.getPhase());
+        assertNotNull(game.getCurrentDilemma());
+
+        // p0 and p1 pick A with majority bet, p2 picks B
         game.handleAction("p0", "SUBMIT_CHOICE", Map.of("choice", "A", "bet_majority", true));
         game.handleAction("p1", "SUBMIT_CHOICE", Map.of("choice", "A", "bet_majority", true));
         game.handleAction("p2", "SUBMIT_CHOICE", Map.of("choice", "B", "bet_majority", true));

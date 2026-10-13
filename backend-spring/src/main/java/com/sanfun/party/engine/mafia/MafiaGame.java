@@ -265,7 +265,17 @@ public class MafiaGame extends BasePartyGame {
     public synchronized Map<String, Object> handleAction(String playerId, String action, Map<String, Object> data) {
         if (data == null) data = Collections.emptyMap();
 
-        if (!alivePlayers.contains(playerId) && !"PING".equals(action)) {
+        if ("START_VOTING".equals(action) || "CALL_VOTE".equals(action)) {
+            if ("DAY_DISCUSSION".equals(phase) || "ROLE_REVEAL".equals(phase)) {
+                dayVotes.clear();
+                phase = "DAY_VOTE";
+                phaseTimer = 30.0;
+                return Map.of("broadcast", true, "event", "PHASE_CHANGE", "new_phase", "DAY_VOTE");
+            }
+            return Map.of("status", "ignored");
+        }
+
+        if (!alivePlayers.contains(playerId) && !"PING".equals(action) && !"HOST".equals(playerId)) {
             return Map.of("error", "Eliminated players cannot take actions.");
         }
 

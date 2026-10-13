@@ -185,6 +185,26 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
                 if (targetPid != null) {
                     room.promoteHost(targetPid);
                 }
+            } else if (ClientMessageType.CLEAR_SCORES.name().equals(msgType)) {
+                String targetPid = (String) data.get("target_player_id");
+                room.clearScores(targetPid);
+            } else if (ClientMessageType.UPDATE_SETTINGS.name().equals(msgType)) {
+                room.updateSettings(data);
+            } else if (ClientMessageType.SKIP_PHASE.name().equals(msgType)) {
+                room.skipPhase();
+            } else if (ClientMessageType.GAME_ACTION.name().equals(msgType)) {
+                if ("IN_GAME".equals(room.getState()) && room.getGameInstance() != null) {
+                    String action = (String) data.get("action");
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> actionData = (Map<String, Object>) data.getOrDefault("data", Collections.emptyMap());
+                    Map<String, Object> res = room.getGameInstance().handleAction("HOST", action, actionData);
+                    if (Boolean.TRUE.equals(res.get("broadcast"))) {
+                        room.broadcastGameState();
+                    }
+                    if (res.containsKey("event")) {
+                        room.broadcastEvent((String) res.get("event"), res);
+                    }
+                }
             }
         } else if ("player".equalsIgnoreCase(role) && playerId != null) {
             PlayerInfo pInfo = room.getPlayers().get(playerId);
@@ -216,6 +236,16 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
                     if (targetPid != null) {
                         room.promoteHost(targetPid);
                     }
+                    return;
+                } else if (ClientMessageType.CLEAR_SCORES.name().equals(msgType)) {
+                    String targetPid = (String) data.get("target_player_id");
+                    room.clearScores(targetPid);
+                    return;
+                } else if (ClientMessageType.UPDATE_SETTINGS.name().equals(msgType)) {
+                    room.updateSettings(data);
+                    return;
+                } else if (ClientMessageType.SKIP_PHASE.name().equals(msgType)) {
+                    room.skipPhase();
                     return;
                 }
             }

@@ -38,6 +38,10 @@ public class PartyRoom {
     private volatile long lastActiveAt = System.currentTimeMillis();
 
     private final NetworkDiscoveryService networkDiscoveryService;
+    private final Map<String, Object> settings = new ConcurrentHashMap<>(Map.of(
+            "max_rounds", 3,
+            "time_limit", 30
+    ));
 
     public PartyRoom(String code, NetworkDiscoveryService networkDiscoveryService) {
         this.code = code;
@@ -87,6 +91,7 @@ public class PartyRoom {
         lobby.put("player_count", players.size());
         lobby.put("host_connected", hostSocket != null && hostSocket.isOpen());
         lobby.put("network_info", networkDiscoveryService.getNetworkInfo());
+        lobby.put("settings", new LinkedHashMap<>(settings));
         return lobby;
     }
 
@@ -180,6 +185,10 @@ public class PartyRoom {
         }
 
         gameInstance = GameFactory.createGame(selectedGameId, code, players, recentImposters);
+        Object mr = settings.get("max_rounds");
+        if (mr instanceof Number n) {
+            gameInstance.setMaxRounds(n.intValue());
+        }
         gameInstance.start();
 
         if (gameInstance instanceof com.sanfun.party.engine.imposter.ImposterGame impGame) {
@@ -197,6 +206,50 @@ public class PartyRoom {
         broadcastGameState();
         broadcastEvent("GAME_STARTED", Map.of("game_id", selectedGameId));
         return true;
+    }
+
+    public synchronized void updateSettings(Map<String, Object> newSettings) {
+        if (newSettings != null) {
+            settings.putAll(newSettings);
+            broadcastRoomState();
+            broadcastEvent("SETTINGS_UPDATED", Map.of("settings", new LinkedHashMap<>(settings)));
+        }
+    }
+
+    public synchronized void clearScores(String targetPid) {
+        if (targetPid == null || "ALL".equalsIgnoreCase(targetPid)) {
+            for (PlayerInfo p : players.values()) {
+                p.setScore(0);
+            }
+            if (gameInstance != null) {
+                for (String pid : gameInstance.getScores().keySet()) {
+                    gameInstance.getScores().put(pid, 0);
+                }
+            }
+        } else {
+            PlayerInfo p = players.get(targetPid);
+            if (p != null) {
+                p.setScore(0);
+            }
+            if (gameInstance != null) {
+                gameInstance.getScores().put(targetPid, 0);
+            }
+        }
+        broadcastRoomState();
+        if ("IN_GAME".equals(state)) {
+            broadcastGameState();
+        }
+        broadcastEvent("SCORES_CLEARED", Map.of("target_player_id", targetPid != null ? targetPid : "ALL"));
+    }
+
+    public synchronized void skipPhase() {
+        if (gameInstance != null) {
+            String nextPhase = gameInstance.skipPhase();
+            broadcastGameState();
+            if (nextPhase != null) {
+                broadcastEvent("PHASE_CHANGE", Map.of("new_phase", nextPhase));
+            }
+        }
     }
 
     public synchronized void backToLobby() {

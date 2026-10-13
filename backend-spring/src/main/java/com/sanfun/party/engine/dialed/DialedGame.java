@@ -9,14 +9,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DialedGame extends BasePartyGame {
     public static final String GAME_ID = "dialed";
     public static final String GAME_NAME = "Dialed";
-    public static final String GAME_TAGLINE = "Tune your senses to exact color hues and audio pitches";
-    public static final String GAME_DESCRIPTION = "Test your memory and perception. Match exact target colors and frequencies on your phone dial.";
-    public static final String GAME_ICON = "🎯";
+    public static final String GAME_TAGLINE = "Test your visual memory with pure color matching";
+    public static final String GAME_DESCRIPTION = "Inspect the secret target color, then recreate its exact Hue, Contrast, and Brightness on your phone.";
+    public static final String GAME_ICON = "🎨";
     public static final int MIN_PLAYERS = 2;
     public static final int MAX_PLAYERS = 16;
 
     public record TargetColor(String name, double h, double s, double v, String hex) {}
-    public record TargetPitch(String name, String note, double freq) {}
 
     public static final List<TargetColor> TARGET_COLORS = List.of(
             new TargetColor("Electric Cyan", 184, 0.95, 1.0, "#0df0ff"),
@@ -37,23 +36,7 @@ public class DialedGame extends BasePartyGame {
             new TargetColor("Lime Flash", 115, 0.90, 0.95, "#40f218")
     );
 
-    public static final List<TargetPitch> TARGET_PITCHES = List.of(
-            new TargetPitch("Tenor C (C3)", "C3", 130.81),
-            new TargetPitch("Deep F (F3)", "F3", 174.61),
-            new TargetPitch("Low G (G3)", "G3", 196.00),
-            new TargetPitch("Middle C (C4)", "C4", 261.63),
-            new TargetPitch("D in Octave 4 (D4)", "D4", 293.66),
-            new TargetPitch("Golden E (E4)", "E4", 329.63),
-            new TargetPitch("Bright F (F4)", "F4", 349.23),
-            new TargetPitch("Concert G (G4)", "G4", 392.00),
-            new TargetPitch("Concert A (A4)", "A4", 440.00),
-            new TargetPitch("Warm B (B4)", "B4", 493.88),
-            new TargetPitch("High C (C5)", "C5", 523.25)
-    );
-
-    private String roundType = "COLOR";
     private TargetColor targetColor;
-    private TargetPitch targetPitch;
     private final Map<String, Map<String, Object>> playerDials = new ConcurrentHashMap<>();
     private final Map<String, Map<String, Object>> roundResults = new ConcurrentHashMap<>();
     private volatile String winner = null;
@@ -100,200 +83,135 @@ public class DialedGame extends BasePartyGame {
         return Math.max(0.0, Math.round((100.0 - dist) * 10.0) / 10.0);
     }
 
-    @SuppressWarnings("unchecked")
-    public static double calculateColorScore(Map<String, ?> targetHsv, Map<String, ?> guessHsv) {
-        if (targetHsv == null) return 0.0;
-        double th = 0.0, ts = 1.0, tv = 1.0;
-        if (targetHsv.get("h") instanceof Number n) th = n.doubleValue();
-        if (targetHsv.get("s") instanceof Number n) {
-            ts = n.doubleValue();
-            if (ts > 1.0) ts /= 100.0;
-        }
-        if (targetHsv.get("v") instanceof Number n) {
-            tv = n.doubleValue();
-            if (tv > 1.0) tv /= 100.0;
-        }
-        return calculateColorScore(new TargetColor("Custom", th, ts, tv, ""), (Map<String, Object>) guessHsv);
-    }
-
-    public static double calculatePitchScore(double targetFreq, double guessFreq) {
-        if (Double.isNaN(guessFreq) || Double.isInfinite(guessFreq) ||
-            Double.isNaN(targetFreq) || Double.isInfinite(targetFreq) ||
-            guessFreq <= 0 || targetFreq <= 0) {
-            return 0.0;
-        }
-        double cents = 1200.0 * Math.abs(Math.log(guessFreq / targetFreq) / Math.log(2.0));
-        return Math.max(0.0, Math.round((100.0 - (cents / 12.0)) * 10.0) / 10.0);
+    public static double calculateColorScore(Map<String, Object> targetMap, Map<String, Object> guessMap) {
+        if (targetMap == null) return 0.0;
+        double h = ((Number) targetMap.getOrDefault("h", 0.0)).doubleValue();
+        double s = ((Number) targetMap.getOrDefault("s", 1.0)).doubleValue();
+        double v = ((Number) targetMap.getOrDefault("v", 1.0)).doubleValue();
+        String name = (String) targetMap.getOrDefault("name", "Target");
+        String hex = (String) targetMap.getOrDefault("hex", "#ffffff");
+        return calculateColorScore(new TargetColor(name, h, s, v, hex), guessMap);
     }
 
     @Override
-    public synchronized void start() {
-        roundNumber = 1;
-        isOver = false;
+    public void start() {
+        this.roundNumber = 1;
+        this.isOver = false;
+        this.winner = null;
         startRound();
     }
 
     private void startRound() {
-        playerDials.clear();
-        roundResults.clear();
-        Random rng = new Random();
+        this.playerDials.clear();
+        this.roundResults.clear();
 
-        if (roundNumber == 2) {
-            roundType = "PITCH";
-            targetPitch = TARGET_PITCHES.get(rng.nextInt(TARGET_PITCHES.size()));
-            targetColor = null;
-        } else {
-            roundType = "COLOR";
-            targetColor = TARGET_COLORS.get(rng.nextInt(TARGET_COLORS.size()));
-            targetPitch = null;
-        }
+        List<TargetColor> pool = new ArrayList<>(TARGET_COLORS);
+        Collections.shuffle(pool);
+        this.targetColor = pool.get(0);
 
-        phase = "INSPECT";
-        phaseTimer = 6.0;
+        this.phase = "INSPECT";
+        this.phaseTimer = 10.0; // 10 seconds to memorize target color
     }
 
     @Override
-    public synchronized String onTimerExpired() {
-        switch (phase) {
-            case "INSPECT" -> {
-                phase = "DIAL";
-                phaseTimer = 20.0;
-                return phase;
-            }
-            case "DIAL" -> {
-                resolveRound();
-                phase = "REVEAL";
-                phaseTimer = 10.0;
-                return phase;
-            }
-            case "REVEAL" -> {
-                if (roundNumber >= maxRounds) {
-                    phase = "GAME_OVER";
-                    isOver = true;
-                    scores.entrySet().stream()
-                            .max(Map.Entry.comparingByValue())
-                            .ifPresent(top -> {
-                                PlayerInfo p = players.get(top.getKey());
-                                if (p != null) winner = p.getNickname();
-                            });
-                    return phase;
-                } else {
-                    roundNumber++;
-                    startRound();
-                    return phase;
-                }
-            }
-            default -> {
-                return null;
-            }
-        }
-    }
-
-    private void resolveRound() {
-        for (String pid : players.keySet()) {
-            Map<String, Object> guess = playerDials.getOrDefault(pid, Collections.emptyMap());
-            double scorePct;
-            if ("COLOR".equals(roundType)) {
-                scorePct = calculateColorScore(targetColor, guess);
+    public String onTimerExpired() {
+        if ("INSPECT".equals(phase)) {
+            this.phase = "DIAL";
+            this.phaseTimer = 25.0; // 25s for players to dial in color
+            return "DIAL";
+        } else if ("DIAL".equals(phase)) {
+            evaluateRound();
+            this.phase = "REVEAL";
+            this.phaseTimer = 10.0;
+            return "REVEAL";
+        } else if ("REVEAL".equals(phase)) {
+            if (this.roundNumber >= this.maxRounds) {
+                this.phase = "GAME_OVER";
+                this.isOver = true;
+                this.phaseTimer = 0.0;
+                determineWinner();
+                return "GAME_OVER";
             } else {
-                double guessF = 0.0;
-                Object pVal = guess.get("pitch");
-                if (pVal instanceof Number n) guessF = n.doubleValue();
-                scorePct = calculatePitchScore(targetPitch.freq(), guessF);
+                this.roundNumber++;
+                startRound();
+                return "INSPECT";
             }
+        }
+        return null;
+    }
 
-            int pts = (int) Math.round(scorePct * 10.0);
-            scores.put(pid, scores.getOrDefault(pid, 0) + pts);
-            roundResults.put(pid, Map.of(
-                    "score_pct", scorePct,
-                    "points_awarded", pts,
-                    "guess", guess
-            ));
+    private void evaluateRound() {
+        for (PlayerInfo p : players.values()) {
+            Map<String, Object> dial = playerDials.get(p.getId());
+            double score = calculateColorScore(targetColor, dial);
+            int pts = (int) Math.round(score * 10); // up to 1000 points
+
+            scores.merge(p.getId(), pts, Integer::sum);
+            p.setScore(scores.get(p.getId()));
+
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("player_id", p.getId());
+            res.put("nickname", p.getNickname());
+            res.put("dial", dial);
+            res.put("score", score);
+            res.put("points_earned", pts);
+            roundResults.put(p.getId(), res);
+        }
+    }
+
+    private void determineWinner() {
+        String bestPid = null;
+        int bestScore = -1;
+        for (Map.Entry<String, Integer> entry : scores.entrySet()) {
+            if (entry.getValue() > bestScore) {
+                bestScore = entry.getValue();
+                bestPid = entry.getKey();
+            }
+        }
+        if (bestPid != null && players.containsKey(bestPid)) {
+            this.winner = players.get(bestPid).getNickname();
+        } else {
+            this.winner = "Nobody";
         }
     }
 
     @Override
-    public synchronized Map<String, Object> handleAction(String playerId, String action, Map<String, Object> data) {
-        if (data == null) data = Collections.emptyMap();
-
-        if ("DIAL".equals(phase) && ("SUBMIT_DIAL".equals(action) || "LOCK_IN".equals(action))) {
-            playerDials.put(playerId, data);
-            long connectedCount = players.values().stream().filter(PlayerInfo::isConnected).count();
-            if (playerDials.size() >= connectedCount) {
-                resolveRound();
-                phase = "REVEAL";
-                phaseTimer = 10.0;
+    public Map<String, Object> handleAction(String playerId, String action, Map<String, Object> data) {
+        if ("SUBMIT_DIAL".equals(action) && "DIAL".equals(phase)) {
+            if (data != null) {
+                playerDials.put(playerId, new LinkedHashMap<>(data));
+            }
+            if (playerDials.size() >= players.size()) {
+                String next = onTimerExpired();
+                return Map.of("broadcast", true, "event", "PHASE_CHANGE", "new_phase", next);
             }
             return Map.of("broadcast", true);
         }
-        return Map.of("status", "ignored");
+        return Collections.emptyMap();
     }
 
     @Override
     public Map<String, Object> getHostState() {
         Map<String, Object> state = getBaseState();
-        state.put("round_type", roundType);
-        boolean showTarget = "INSPECT".equals(phase) || "REVEAL".equals(phase) || isOver;
-
-        if (showTarget) {
-            if ("COLOR".equals(roundType) && targetColor != null) {
-                state.put("target_color", Map.of(
-                        "name", targetColor.name(),
-                        "h", targetColor.h(),
-                        "s", targetColor.s(),
-                        "v", targetColor.v(),
-                        "hex", targetColor.hex()
-                ));
-            } else if ("PITCH".equals(roundType) && targetPitch != null) {
-                state.put("target_pitch", Map.of(
-                        "name", targetPitch.name(),
-                        "note", targetPitch.note(),
-                        "freq", targetPitch.freq()
-                ));
-            }
-        } else {
-            state.put("target_color", null);
-            state.put("target_pitch", null);
-        }
-
-        state.put("round_results", ("REVEAL".equals(phase) || isOver) ? roundResults : Collections.emptyMap());
-        state.put("submitted_pids", new ArrayList<>(playerDials.keySet()));
+        state.put("target_color", targetColor);
+        state.put("results", roundResults);
         state.put("winner", winner);
-
+        state.put("submitted_count", playerDials.size());
         return state;
     }
 
     @Override
     public Map<String, Object> getPlayerState(String playerId) {
         Map<String, Object> state = getBaseState();
-        state.put("round_type", roundType);
-
-        if ("INSPECT".equals(phase)) {
-            if ("COLOR".equals(roundType) && targetColor != null) {
-                state.put("target_color", Map.of(
-                        "name", targetColor.name(),
-                        "h", targetColor.h(),
-                        "s", targetColor.s(),
-                        "v", targetColor.v(),
-                        "hex", targetColor.hex()
-                ));
-            } else if ("PITCH".equals(roundType) && targetPitch != null) {
-                state.put("target_pitch", Map.of(
-                        "name", targetPitch.name(),
-                        "note", targetPitch.note(),
-                        "freq", targetPitch.freq()
-                ));
-            }
-        } else {
-            state.put("target_color", null);
-            state.put("target_pitch", null);
+        if ("INSPECT".equals(phase) || "REVEAL".equals(phase) || "GAME_OVER".equals(phase)) {
+            state.put("target_color", targetColor);
         }
-
+        state.put("has_submitted", playerDials.containsKey(playerId));
         state.put("my_dial", playerDials.get(playerId));
-        state.put("has_locked", playerDials.containsKey(playerId));
-        state.put("my_result", ("REVEAL".equals(phase) || isOver) ? roundResults.get(playerId) : null);
+        state.put("results", roundResults);
         state.put("winner", winner);
-
         return state;
     }
+
+    public TargetColor getTargetColor() { return targetColor; }
 }

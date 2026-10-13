@@ -50,8 +50,27 @@ public class CircleGame extends BasePartyGame {
         }
         double rMean = sumR / n;
 
-        if (rMean < 30.0 || rMean > 600.0) {
-            return Map.of("score", 0.0, "reason", "Circle radius out of bounds (must be 30-600px)", "mean_radius", Math.round(rMean * 10.0) / 10.0);
+        double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (List<Double> p : points) {
+            minX = Math.min(minX, p.get(0));
+            maxX = Math.max(maxX, p.get(0));
+            minY = Math.min(minY, p.get(1));
+            maxY = Math.max(maxY, p.get(1));
+        }
+        double width = maxX - minX;
+        double height = maxY - minY;
+
+        if (rMean < 30.0 || width < 60.0 || height < 60.0) {
+            return Map.of(
+                    "score", 0.0,
+                    "reason", "Circle is too small! (Diameter must be at least 60px). Try drawing a larger circle.",
+                    "mean_radius", Math.round(rMean * 10.0) / 10.0,
+                    "too_small", true
+            );
+        }
+        if (rMean > 600.0) {
+            return Map.of("score", 0.0, "reason", "Circle radius out of bounds (exceeds 600px)", "mean_radius", Math.round(rMean * 10.0) / 10.0);
         }
 
         double sumVar = 0.0;
