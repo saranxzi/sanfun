@@ -19,9 +19,14 @@ public class SpaWebConfig implements WebMvcConfigurer {
                 distUri += "/";
             }
             registry.addResourceHandler("/assets/**")
-                    .addResourceLocations(distUri + "assets/");
+                    .addResourceLocations(distUri + "assets/", "classpath:/static/assets/");
             registry.addResourceHandler("/*.*")
-                    .addResourceLocations(distUri);
+                    .addResourceLocations(distUri, "classpath:/static/");
+        } else {
+            registry.addResourceHandler("/assets/**")
+                    .addResourceLocations("classpath:/static/assets/");
+            registry.addResourceHandler("/*.*")
+                    .addResourceLocations("classpath:/static/");
         }
     }
 }

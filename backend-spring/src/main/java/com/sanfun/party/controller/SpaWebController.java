@@ -1,5 +1,6 @@
 package com.sanfun.party.controller;
 
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,12 @@ public class SpaWebController {
                         .contentType(MediaType.TEXT_HTML)
                         .body(new FileSystemResource(indexFile));
             }
+        }
+        ClassPathResource cpResource = new ClassPathResource("static/index.html");
+        if (cpResource.exists()) {
+            return ResponseEntity.ok()
+                    .contentType(MediaType.TEXT_HTML)
+                    .body(cpResource);
         }
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .contentType(MediaType.TEXT_PLAIN)
