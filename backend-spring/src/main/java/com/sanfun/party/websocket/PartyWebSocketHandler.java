@@ -89,10 +89,46 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
             }
             room.setHostSocket(session);
             room.touch();
+
             if ("LOBBY".equals(room.getState())) {
                 room.broadcastRoomState();
             } else {
                 room.broadcastGameState();
+            }
+
+            boolean playAsHost = "true".equalsIgnoreCase(query.get("play_as_host"));
+            if (playAsHost) {
+                PlayerInfo player = null;
+                String activeSessionToken = sessionToken;
+                if (sessionToken != null && !sessionToken.isBlank()) {
+                    player = room.reconnectPlayer(sessionToken);
+                }
+                if (player == null) {
+                    if (nickname == null || nickname.isBlank()) {
+                        nickname = "Host";
+                    }
+                    String[] outToken = new String[1];
+                    player = room.addPlayer(nickname, avatar, color, outToken);
+                    activeSessionToken = outToken[0];
+                }
+                player.setHost(true);
+                String pid = player.getId();
+                session.getAttributes().put("player_id", pid);
+                room.getPlayerSockets().put(pid, session);
+
+                Map<String, Object> welcome = new LinkedHashMap<>();
+                welcome.put("player_id", player.getId());
+                welcome.put("session_token", activeSessionToken);
+                welcome.put("nickname", player.getNickname());
+                welcome.put("avatar", player.getAvatar());
+                welcome.put("color", player.getColor());
+                welcome.put("is_host", true);
+                welcome.put("score", player.getScore());
+                welcome.put("my_score", player.getScore());
+                welcome.put("room_code", room.getCode());
+                welcome.put("state", room.getState());
+                room.sendJsonSafe(session, ServerMessageType.PLAYER_STATE, welcome);
+                room.broadcastRoomState();
             }
         } else {
             room.touch();
@@ -197,7 +233,8 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
                     String action = (String) data.get("action");
                     @SuppressWarnings("unchecked")
                     Map<String, Object> actionData = (Map<String, Object>) data.getOrDefault("data", Collections.emptyMap());
-                    Map<String, Object> res = room.getGameInstance().handleAction("HOST", action, actionData);
+                    String actingId = ("START_VOTING".equals(action) || "CALL_VOTE".equals(action) || playerId == null) ? "HOST" : playerId;
+                    Map<String, Object> res = room.getGameInstance().handleAction(actingId, action, actionData);
                     if (Boolean.TRUE.equals(res.get("broadcast"))) {
                         room.broadcastGameState();
                     }
@@ -282,13 +319,17 @@ public class PartyWebSocketHandler extends TextWebSocketHandler {
             if (session == room.getHostSocket()) {
                 room.setHostSocket(null);
             }
+            if (playerId != null) {
+                room.disconnectPlayer(playerId);
+            }
         } else if ("player".equalsIgnoreCase(role) && playerId != null) {
             room.disconnectPlayer(playerId);
-            if ("LOBBY".equals(room.getState())) {
-                room.broadcastRoomState();
-            } else if ("IN_GAME".equals(room.getState())) {
-                room.broadcastGameState();
-            }
+        }
+
+        if ("LOBBY".equals(room.getState())) {
+            room.broadcastRoomState();
+        } else if ("IN_GAME".equals(room.getState())) {
+            room.broadcastGameState();
         }
     }
 

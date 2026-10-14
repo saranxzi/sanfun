@@ -58,6 +58,17 @@ public abstract class BasePartyGame {
         }
     }
 
+    protected volatile double customTimeLimit = 0.0;
+    public double getCustomTimeLimit() { return customTimeLimit; }
+    public void setCustomTimeLimit(double customTimeLimit) {
+        if (customTimeLimit > 0) {
+            this.customTimeLimit = customTimeLimit;
+        }
+    }
+    public double getEffectiveTimer(double defaultTimer) {
+        return customTimeLimit > 0 ? customTimeLimit : defaultTimer;
+    }
+
     public Map<String, Integer> getScores() {
         return scores;
     }

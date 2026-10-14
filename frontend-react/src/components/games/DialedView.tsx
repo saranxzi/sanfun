@@ -54,49 +54,36 @@ export function DialedView({ isHost, gameState, onSendAction }: DialedViewProps)
         </h2>
       </div>
 
-      {/* Host TV: Prominent, Giant Hero Swatch (Closer to Full Screen) */}
+      {/* Host TV: Pure, Flat, Giant Hero Swatch (Clean Matte Color without Fake Plastic Gradients) */}
       {(phase === 'INSPECT' || phase === 'REVEAL' || phase === 'GAME_OVER') && targetColor && (
         <div className="retro-box-lg rounded-3xl p-6 md:p-8 bg-white text-center space-y-4">
-          <span className="font-mono text-xs font-bold text-ink-muted uppercase tracking-widest block">
-            TARGET COLOR REFERENCE
-          </span>
+          <div className="flex items-center justify-between font-mono text-xs font-bold text-ink-muted uppercase tracking-widest">
+            <span>TARGET COLOR REFERENCE</span>
+            <span>MEMORIZE THIS PURE SHADE</span>
+          </div>
 
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-            className="w-full h-72 md:h-96 rounded-2xl md:rounded-3xl border-4 border-ink shadow-retro-lg flex flex-col items-center justify-end p-6 relative overflow-hidden"
+            className="w-full h-72 md:h-96 rounded-2xl md:rounded-3xl border-4 border-ink shadow-retro-lg flex items-center justify-center relative overflow-hidden"
             style={{ backgroundColor: targetColor.hex }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
-            <div className="relative z-10 bg-white/95 backdrop-blur-sm border-3 border-ink px-6 py-3 rounded-2xl shadow-retro">
-              <h3 className="font-display font-black text-2xl md:text-3xl text-ink tracking-tight">
-                {targetColor.name}
-              </h3>
-              <span className="font-mono text-xs md:text-sm font-bold text-ink-muted tracking-widest uppercase">
-                {targetColor.hex}
-              </span>
-            </div>
-          </motion.div>
+          />
         </div>
       )}
 
       {/* Player Controller: Three Distinct Sliders (Hue, Contrast/Saturation, Brightness) */}
       {!isHost && phase === 'DIAL' && (
         <div className="retro-box-lg rounded-2xl p-6 bg-white space-y-6">
-          {/* Real-time Dynamic Color Swatch Preview */}
+          {/* Real-time Dynamic Flat Color Swatch Preview */}
           <div className="text-center space-y-2">
             <span className="font-mono text-xs font-bold text-ink-muted uppercase tracking-wider block">
               YOUR TUNED ESTIMATE
             </span>
             <div
-              className="w-full h-36 md:h-44 rounded-2xl border-4 border-ink shadow-retro flex flex-col items-center justify-center transition-colors duration-75"
+              className="w-full h-36 md:h-44 rounded-2xl border-4 border-ink shadow-retro transition-colors duration-75"
               style={{ backgroundColor: previewHex }}
-            >
-              <div className="bg-white/90 border-2 border-ink px-4 py-1.5 rounded-xl font-mono text-xs font-bold text-ink shadow-sm">
-                {previewHex}
-              </div>
-            </div>
+            />
           </div>
 
           {/* 3 Physical Touch Sliders */}

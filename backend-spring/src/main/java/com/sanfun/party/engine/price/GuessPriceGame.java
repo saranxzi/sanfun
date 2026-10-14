@@ -195,7 +195,7 @@ public class GuessPriceGame extends BasePartyGame {
         currentItem = ITEMS.get(idx);
 
         phase = "GUESS";
-        phaseTimer = 30.0;
+        phaseTimer = getEffectiveTimer(30.0);
     }
 
     @Override

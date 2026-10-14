@@ -60,6 +60,7 @@ export function usePartySocket({
 
     const query = new URLSearchParams({ role });
     if (hostToken) query.set('host_token', hostToken);
+    if (role === 'host') query.set('play_as_host', 'true');
 
     const savedSessionToken = localStorage.getItem(tokenKey);
     if (savedSessionToken) query.set('session_token', savedSessionToken);

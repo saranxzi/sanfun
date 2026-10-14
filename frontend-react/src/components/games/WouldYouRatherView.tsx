@@ -149,10 +149,10 @@ export function WouldYouRatherView({ isHost, gameState, onSendAction }: WouldYou
             <TrendingUp size={20} className="text-arcade-mustard" />
             <div>
               <span className="font-mono text-xs font-black uppercase block text-ink">
-                Majority Consensus Bet (+500 pts)
+                Majority Consensus Bet (+500 / -500 pts)
               </span>
               <span className="font-mono text-[11px] text-ink-muted">
-                Bet that your choice is what the majority of the room picks!
+                Bet that your choice is what the majority picks! +500 if right, -500 if wrong.
               </span>
             </div>
           </div>
@@ -192,8 +192,28 @@ export function WouldYouRatherView({ isHost, gameState, onSendAction }: WouldYou
             </div>
           </div>
 
+          {/* Player's Personal Verdict Callout */}
+          {gameState.my_result && (
+            <div className={`p-4 rounded-xl border-3 border-ink text-center shadow-retro-sm ${
+              (gameState.my_result.points_earned || 0) > 0
+                ? 'bg-emerald-50 border-emerald-600'
+                : (gameState.my_result.points_earned || 0) < 0
+                ? 'bg-red-50 border-red-600'
+                : 'bg-paper-light'
+            }`}>
+              <div className="font-display font-black text-xl text-ink">
+                {gameState.my_result.verdict}
+              </div>
+              <div className={`font-mono font-black text-sm mt-1 ${
+                (gameState.my_result.points_earned || 0) < 0 ? 'text-red-600' : 'text-emerald-700'
+              }`}>
+                Round Result: {(gameState.my_result.points_earned || 0) > 0 ? `+${gameState.my_result.points_earned}` : (gameState.my_result.points_earned || 0)} pts
+              </div>
+            </div>
+          )}
+
           {/* Standings & Player Decisions */}
-          {gameState.round_results && (
+          {gameState.round_results && Object.keys(gameState.round_results).length > 0 && (
             <div className="space-y-3 pt-2">
               <div className="flex items-center gap-2 font-mono text-xs font-bold text-arcade-terracotta uppercase">
                 <Sparkles size={16} />
@@ -215,8 +235,10 @@ export function WouldYouRatherView({ isHost, gameState, onSendAction }: WouldYou
                         </span>
                       </div>
                     </div>
-                    <div className="font-mono font-black text-lg text-arcade-cobalt">
-                      +{res.points_earned || 0} pts
+                    <div className={`font-mono font-black text-lg ${
+                      (res.points_earned || 0) < 0 ? 'text-red-600' : 'text-arcade-cobalt'
+                    }`}>
+                      {(res.points_earned || 0) > 0 ? `+${res.points_earned}` : (res.points_earned || 0)} pts
                     </div>
                   </div>
                 ))}

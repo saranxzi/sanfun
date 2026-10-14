@@ -152,6 +152,9 @@ public class PartyRoom {
                 playerState.put("nickname", pInfo.getNickname());
                 playerState.put("avatar", pInfo.getAvatar());
                 playerState.put("color", pInfo.getColor());
+                playerState.put("score", pInfo.getScore());
+                playerState.put("my_score", pInfo.getScore());
+                playerState.put("is_host", pInfo.isHost());
                 sendJsonSafe(session, ServerMessageType.PLAYER_STATE, playerState);
             }
         }
@@ -188,6 +191,10 @@ public class PartyRoom {
         Object mr = settings.get("max_rounds");
         if (mr instanceof Number n) {
             gameInstance.setMaxRounds(n.intValue());
+        }
+        Object tl = settings.get("time_limit");
+        if (tl instanceof Number t) {
+            gameInstance.setCustomTimeLimit(t.doubleValue());
         }
         gameInstance.start();
 

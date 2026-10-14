@@ -117,7 +117,7 @@ public class DialedGame extends BasePartyGame {
     public String onTimerExpired() {
         if ("INSPECT".equals(phase)) {
             this.phase = "DIAL";
-            this.phaseTimer = 25.0; // 25s for players to dial in color
+            this.phaseTimer = getEffectiveTimer(25.0); // dialed in color timer
             return "DIAL";
         } else if ("DIAL".equals(phase)) {
             evaluateRound();

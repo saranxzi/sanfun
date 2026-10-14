@@ -83,7 +83,7 @@ public class TrendsGame extends BasePartyGame {
         currentMatchup = MATCHUPS.get(idx);
 
         phase = "GUESS";
-        phaseTimer = 16.0;
+        phaseTimer = getEffectiveTimer(16.0);
     }
 
     @Override

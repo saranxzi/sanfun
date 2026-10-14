@@ -278,7 +278,14 @@ class GameEnginesTests {
         game.handleAction("p2", "SUBMIT_CHOICE", Map.of("choice", "B", "bet_majority", true));
 
         assertEquals("REVEAL", game.getPhase());
-        assertTrue(game.getScores().get("p0") > game.getScores().get("p2"));
+        assertEquals(500, game.getScores().get("p0"));
+        assertEquals(500, game.getScores().get("p1"));
+        assertEquals(-500, game.getScores().get("p2"));
+
+        Map<String, Object> p0State = game.getPlayerState("p0");
+        assertNotNull(p0State.get("pct_a"));
+        assertNotNull(p0State.get("pct_b"));
+        assertEquals("A", p0State.get("majority"));
     }
 
     @Test

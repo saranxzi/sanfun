@@ -88,7 +88,7 @@ public class FermiGame extends BasePartyGame {
         currentQ = QUESTIONS.get(idx);
 
         phase = "QUESTION";
-        phaseTimer = 30.0;
+        phaseTimer = getEffectiveTimer(30.0);
     }
 
     @Override

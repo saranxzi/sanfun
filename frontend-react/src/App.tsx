@@ -105,7 +105,7 @@ export function App() {
   const isHost = role === 'host' || (playerGameState?.is_host === true);
   const isInGame = (hostGameState && hostGameState.state === 'IN_GAME') ||
     (playerGameState && playerGameState.state === 'IN_GAME' && playerGameState.phase !== 'LOBBY');
-  const activeGameState = role === 'host' ? hostGameState : playerGameState;
+  const activeGameState = role === 'host' ? (playerGameState || hostGameState) : playerGameState;
 
   return (
     <div className="min-h-screen bg-paper-light text-ink flex flex-col font-body">
@@ -118,6 +118,8 @@ export function App() {
           <GameContainer
             isHost={isHost}
             gameState={activeGameState}
+            hostGameState={hostGameState}
+            playerGameState={playerGameState}
             phaseTimer={phaseTimer}
             onBackToLobby={backToLobby}
             onSendAction={sendGameAction}

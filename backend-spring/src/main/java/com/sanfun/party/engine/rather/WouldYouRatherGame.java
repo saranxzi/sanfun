@@ -149,7 +149,7 @@ public class WouldYouRatherGame extends BasePartyGame {
         currentDilemma = DILEMMAS.get(idx);
 
         phase = "CHOICE";
-        phaseTimer = 30.0;
+        phaseTimer = getEffectiveTimer(30.0);
     }
 
     @Override
@@ -200,19 +200,20 @@ public class WouldYouRatherGame extends BasePartyGame {
             String verdict = "No Choice Made";
 
             if (choice != null) {
-                pts += 300; // Base points for voting
                 if (betMajority) {
                     if ("TIE".equals(majority)) {
-                        pts += 250;
-                        verdict = "Dead Heat Tie! (+250 Split Bonus)";
+                        pts = 0;
+                        verdict = "Dead Heat Tie! Bet Pushed (0 pts) ⚖️";
                     } else if (choice.equalsIgnoreCase(majority)) {
-                        pts += 500;
-                        verdict = "Majority Bet Paid Off! (+500 Bonus) 🎉";
+                        pts = 500;
+                        verdict = "Majority Bet Won! (+500 pts) 🎉";
                     } else {
-                        verdict = "Rogue Rebel Minority! (+300 Base) 😼";
+                        pts = -500;
+                        verdict = "Majority Bet Lost! (-500 pts) 💀";
                     }
                 } else {
-                    verdict = choice.equalsIgnoreCase(majority) ? "Safe Consensus Voter (+300)" : "Bold Counter-Culture Choice (+300)";
+                    pts = 200;
+                    verdict = choice.equalsIgnoreCase(majority) ? "Safe Vote with Majority (+200 pts)" : "Safe Counter-Culture Vote (+200 pts)";
                 }
             }
 
@@ -321,6 +322,24 @@ public class WouldYouRatherGame extends BasePartyGame {
             state.put("icon_b", currentDilemma.iconB());
             state.put("topic", currentDilemma.topic());
         }
+
+        int countA = 0;
+        int countB = 0;
+        for (String c : playerChoices.values()) {
+            if ("A".equalsIgnoreCase(c)) countA++;
+            else if ("B".equalsIgnoreCase(c)) countB++;
+        }
+        int total = countA + countB;
+        double pctA = total > 0 ? (countA * 100.0 / total) : 50.0;
+        double pctB = total > 0 ? (countB * 100.0 / total) : 50.0;
+
+        state.put("submitted_pids", new ArrayList<>(playerChoices.keySet()));
+        state.put("count_a", isReveal ? countA : null);
+        state.put("count_b", isReveal ? countB : null);
+        state.put("pct_a", isReveal ? Math.round(pctA) : null);
+        state.put("pct_b", isReveal ? Math.round(pctB) : null);
+        state.put("majority", isReveal ? (countA > countB ? "A" : (countB > countA ? "B" : "TIE")) : null);
+        state.put("round_results", isReveal ? roundResults : Collections.emptyMap());
 
         state.put("my_choice", playerChoices.get(playerId));
         state.put("my_bet", playerBets.get(playerId));

@@ -135,7 +135,7 @@ public class CircleGame extends BasePartyGame {
         playerDrawings.clear();
         playerEvals.clear();
         phase = "DRAWING";
-        phaseTimer = 20.0;
+        phaseTimer = getEffectiveTimer(20.0);
     }
 
     @Override
