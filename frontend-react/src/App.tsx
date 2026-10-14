@@ -13,7 +13,13 @@ export function App() {
   const [nickname, setNickname] = useState<string>('');
   const [avatar, setAvatar] = useState<string>('🦊');
   const [color, setColor] = useState<string>('#E25241');
-  const [initialJoinCode, setInitialJoinCode] = useState<string>('');
+  const [initialJoinCode, setInitialJoinCode] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return (params.get('join') || '').toUpperCase().trim();
+    }
+    return '';
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -44,6 +50,9 @@ export function App() {
     sendGameAction,
     kickPlayer,
     promoteHost,
+    clearScores,
+    updateSettings,
+    skipPhase,
   } = usePartySocket({
     roomCode: roomCode || '',
     role,
@@ -100,7 +109,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-paper-light text-ink flex flex-col font-body">
-      <Navbar roomCode={roomCode} connected={connected} onLeave={roomCode ? handleLeave : undefined} />
+      <Navbar roomCode={lobbyState?.room_code || roomCode} connected={connected} onLeave={roomCode ? handleLeave : undefined} />
 
       <main className="flex-1 pb-12">
         {!roomCode ? (
@@ -112,6 +121,7 @@ export function App() {
             phaseTimer={phaseTimer}
             onBackToLobby={backToLobby}
             onSendAction={sendGameAction}
+            onSkipPhase={skipPhase}
           />
         ) : lobbyState ? (
           <UnifiedLobby
@@ -122,6 +132,8 @@ export function App() {
             onStartGame={startGame}
             onKickPlayer={kickPlayer}
             onPromoteHost={promoteHost}
+            onClearScores={clearScores}
+            onUpdateSettings={updateSettings}
           />
         ) : (
           <div className="text-center py-20 font-mono text-sm font-bold text-ink-muted">

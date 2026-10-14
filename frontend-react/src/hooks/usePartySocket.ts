@@ -39,6 +39,14 @@ export function usePartySocket({
   const normalizedCode = roomCode.toUpperCase().trim();
   const tokenKey = `sanfun_token_${normalizedCode}`;
 
+  useEffect(() => {
+    setLobbyState(null);
+    setHostGameState(null);
+    setPlayerGameState(null);
+    setPhaseTimer(0);
+    setErrorMsg(null);
+  }, [normalizedCode]);
+
   const connect = useCallback(() => {
     if (!normalizedCode || manualCloseRef.current) return;
 
@@ -218,6 +226,18 @@ export function usePartySocket({
     send('PROMOTE_HOST', { target_player_id: targetPid });
   }, [send]);
 
+  const clearScores = useCallback((targetPid?: string) => {
+    send('CLEAR_SCORES', { target_player_id: targetPid || 'ALL' });
+  }, [send]);
+
+  const updateSettings = useCallback((settings: { max_rounds?: number; time_limit?: number }) => {
+    send('UPDATE_SETTINGS', settings);
+  }, [send]);
+
+  const skipPhase = useCallback(() => {
+    send('SKIP_PHASE', {});
+  }, [send]);
+
   return {
     connected,
     lobbyState,
@@ -232,5 +252,8 @@ export function usePartySocket({
     sendGameAction,
     kickPlayer,
     promoteHost,
+    clearScores,
+    updateSettings,
+    skipPhase,
   };
 }

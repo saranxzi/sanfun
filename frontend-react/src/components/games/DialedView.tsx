@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { soundEngine } from '../../audio/sound';
-import { Target, Music, Check, Volume2, Sparkles } from 'lucide-react';
+import { Target, Sparkles, Check, Sliders } from 'lucide-react';
 
 interface DialedViewProps {
   isHost: boolean;
@@ -12,38 +12,31 @@ interface DialedViewProps {
 export function DialedView({ isHost, gameState, onSendAction }: DialedViewProps) {
   const [hue, setHue] = useState(180);
   const [saturation, setSaturation] = useState(85);
-  const [value, setValue] = useState(90);
-  const [pitch, setPitch] = useState(330);
+  const [value, setValue] = useState(85);
   const [locked, setLocked] = useState(false);
 
   const phase = gameState?.phase || 'INIT';
-  const roundType = gameState?.round_type || 'COLOR';
   const targetColor = gameState?.target_color;
-  const targetPitch = gameState?.target_pitch;
 
   useEffect(() => {
-    if (phase === 'INSPECT' && roundType === 'PITCH' && targetPitch) {
-      soundEngine.playTone(targetPitch.freq, 1.2, 'sine', 0.3);
-    }
-    if (phase === 'INSPECT') {
-      setLocked(false);
-    }
-  }, [phase, roundType, targetPitch]);
+    setLocked(false);
+  }, [gameState?.round_number, phase]);
 
-  const previewHex = `hsl(${hue}, ${saturation}%, ${value * 0.5}%)`;
+  const isLocked = locked || Boolean(gameState?.has_submitted);
 
-  const playMyPitch = () => {
-    soundEngine.playTone(pitch, 0.4, 'sine', 0.25);
-  };
+  // Convert HSB to HSL for CSS preview
+  // L = V * (1 - S / 2)
+  // S_hsl = (L === 0 || L === 1) ? 0 : (V - L) / Math.min(L, 1 - L)
+  const sNorm = saturation / 100;
+  const vNorm = value / 100;
+  const lNorm = vNorm * (1 - sNorm / 2);
+  const sHslNorm = (lNorm === 0 || lNorm === 1) ? 0 : (vNorm - lNorm) / Math.min(lNorm, 1 - lNorm);
+  const previewHex = `hsl(${Math.round(hue)}, ${Math.round(sHslNorm * 100)}%, ${Math.round(lNorm * 100)}%)`;
 
   const submitDial = () => {
     setLocked(true);
     soundEngine.playDing();
-    if (roundType === 'COLOR') {
-      onSendAction('SUBMIT_DIAL', { h: hue, s: saturation, v: value });
-    } else {
-      onSendAction('SUBMIT_DIAL', { pitch });
-    }
+    onSendAction('SUBMIT_DIAL', { h: hue, s: saturation, v: value });
   };
 
   return (
@@ -51,178 +44,199 @@ export function DialedView({ isHost, gameState, onSendAction }: DialedViewProps)
       {/* Header */}
       <div className="retro-box-lg rounded-2xl p-5 text-center bg-white">
         <div className="font-mono text-xs font-bold uppercase tracking-wider text-arcade-cobalt mb-1">
-          ROUND {gameState.round_number || 1} OF {gameState.max_rounds || 3} • {roundType} MATCH
+          ROUND {gameState.round_number || 1} OF {gameState.max_rounds || 3} • COLOR CHROMATIC MATCH
         </div>
         <h2 className="font-display font-black text-3xl md:text-4xl text-ink uppercase">
-          {phase === 'INSPECT' && 'Memorize The Target'}
-          {phase === 'DIAL' && (roundType === 'COLOR' ? 'Tune Your Color Dial' : 'Tune Your Frequency')}
-          {phase === 'REVEAL' && 'Precision Reveal'}
+          {phase === 'INSPECT' && 'Memorize The Exact Shade'}
+          {phase === 'DIAL' && 'Tune Your Hue, Contrast & Brightness'}
+          {phase === 'REVEAL' && 'Chromatic Precision Reveal'}
           {phase === 'GAME_OVER' && `${gameState.winner || 'GAME'} WINS!`}
         </h2>
       </div>
 
-      {/* Target Preview Box (During Inspect or Reveal) */}
-      {(phase === 'INSPECT' || phase === 'REVEAL' || phase === 'GAME_OVER') && (
-        <div className="retro-box-lg rounded-2xl p-6 bg-white text-center space-y-4">
-          <span className="font-mono text-xs font-bold text-ink-muted uppercase tracking-wider">
-            TARGET REFERENCE
+      {/* Host TV: Prominent, Giant Hero Swatch (Closer to Full Screen) */}
+      {(phase === 'INSPECT' || phase === 'REVEAL' || phase === 'GAME_OVER') && targetColor && (
+        <div className="retro-box-lg rounded-3xl p-6 md:p-8 bg-white text-center space-y-4">
+          <span className="font-mono text-xs font-bold text-ink-muted uppercase tracking-widest block">
+            TARGET COLOR REFERENCE
           </span>
 
-          {roundType === 'COLOR' && targetColor && (
-            <div className="flex flex-col items-center">
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="w-32 h-32 rounded-2xl border-4 border-ink shadow-retro-lg mb-3"
-                style={{ backgroundColor: targetColor.hex }}
-              />
-              <h3 className="font-display font-black text-2xl text-ink">{targetColor.name}</h3>
-              <span className="font-mono text-xs text-ink-muted">{targetColor.hex}</span>
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+            className="w-full h-72 md:h-96 rounded-2xl md:rounded-3xl border-4 border-ink shadow-retro-lg flex flex-col items-center justify-end p-6 relative overflow-hidden"
+            style={{ backgroundColor: targetColor.hex }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+            <div className="relative z-10 bg-white/95 backdrop-blur-sm border-3 border-ink px-6 py-3 rounded-2xl shadow-retro">
+              <h3 className="font-display font-black text-2xl md:text-3xl text-ink tracking-tight">
+                {targetColor.name}
+              </h3>
+              <span className="font-mono text-xs md:text-sm font-bold text-ink-muted tracking-widest uppercase">
+                {targetColor.hex}
+              </span>
             </div>
-          )}
-
-          {roundType === 'PITCH' && targetPitch && (
-            <div className="flex flex-col items-center">
-              <div className="w-24 h-24 rounded-2xl border-4 border-ink bg-arcade-mustard flex items-center justify-center text-4xl shadow-retro-lg mb-3">
-                <Music size={40} className="text-ink" />
-              </div>
-              <h3 className="font-display font-black text-2xl text-ink">{targetPitch.name}</h3>
-              <span className="font-mono text-sm text-ink-muted">{targetPitch.freq} Hz</span>
-              <button
-                type="button"
-                onClick={() => soundEngine.playTone(targetPitch.freq, 0.8, 'sine', 0.3)}
-                className="retro-btn bg-paper-light text-ink text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 mt-2"
-              >
-                <Volume2 size={14} />
-                <span>Replay Target Tone</span>
-              </button>
-            </div>
-          )}
+          </motion.div>
         </div>
       )}
 
-      {/* Interactive Dial Controller (Player View) */}
+      {/* Player Controller: Three Distinct Sliders (Hue, Contrast/Saturation, Brightness) */}
       {!isHost && phase === 'DIAL' && (
         <div className="retro-box-lg rounded-2xl p-6 bg-white space-y-6">
-          {roundType === 'COLOR' ? (
-            <div className="space-y-5">
-              {/* Live Swatch Preview */}
-              <div className="text-center">
-                <div
-                  className="w-28 h-28 mx-auto rounded-2xl border-4 border-ink shadow-retro transition-colors duration-100"
-                  style={{ backgroundColor: previewHex }}
-                />
-                <span className="font-mono text-xs font-bold text-ink-muted mt-2 block">
-                  YOUR LIVE COLOR TUNER
-                </span>
-              </div>
-
-              {/* Hue Rotary / Spring Slider */}
-              <div>
-                <div className="flex justify-between font-mono text-xs font-bold text-ink mb-1">
-                  <span>Color Hue ({hue}°)</span>
-                  <span>Spectrum</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="359"
-                  value={hue}
-                  onChange={(e) => setHue(Number(e.target.value))}
-                  disabled={locked}
-                  className="w-full h-8 rounded-lg appearance-none cursor-pointer border-2 border-ink"
-                  style={{
-                    background:
-                      'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)',
-                  }}
-                />
-              </div>
-
-              {/* Saturation */}
-              <div>
-                <div className="flex justify-between font-mono text-xs font-bold text-ink mb-1">
-                  <span>Saturation ({saturation}%)</span>
-                </div>
-                <input
-                  type="range"
-                  min="20"
-                  max="100"
-                  value={saturation}
-                  onChange={(e) => setSaturation(Number(e.target.value))}
-                  disabled={locked}
-                  className="w-full h-4 rounded-lg bg-paper-warm border-2 border-ink"
-                />
+          {/* Real-time Dynamic Color Swatch Preview */}
+          <div className="text-center space-y-2">
+            <span className="font-mono text-xs font-bold text-ink-muted uppercase tracking-wider block">
+              YOUR TUNED ESTIMATE
+            </span>
+            <div
+              className="w-full h-36 md:h-44 rounded-2xl border-4 border-ink shadow-retro flex flex-col items-center justify-center transition-colors duration-75"
+              style={{ backgroundColor: previewHex }}
+            >
+              <div className="bg-white/90 border-2 border-ink px-4 py-1.5 rounded-xl font-mono text-xs font-bold text-ink shadow-sm">
+                {previewHex}
               </div>
             </div>
-          ) : (
-            <div className="space-y-5 text-center">
-              <div className="p-4 bg-arcade-cream border-2 border-ink rounded-xl">
-                <span className="font-mono text-xs font-bold text-ink-muted">TUNED FREQUENCY</span>
-                <div className="font-mono font-black text-4xl text-arcade-cobalt my-1">
-                  {pitch} Hz
-                </div>
-                <button
-                  type="button"
-                  onClick={playMyPitch}
-                  className="retro-btn bg-white text-ink text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"
-                >
-                  <Volume2 size={14} />
-                  <span>Test Tuned Pitch</span>
-                </button>
-              </div>
+          </div>
 
-              {/* Pitch Slider */}
+          {/* 3 Physical Touch Sliders */}
+          <div className="space-y-5">
+            {/* Slider 1: Hue (0 - 360 deg) */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between font-mono text-xs font-bold text-ink">
+                <span>1. HUE (TINT)</span>
+                <span>{Math.round(hue)}°</span>
+              </div>
               <input
                 type="range"
-                min="130"
-                max="590"
-                value={pitch}
+                min="0"
+                max="360"
+                step="1"
+                value={hue}
                 onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setPitch(val);
-                  soundEngine.playTone(val, 0.08, 'sine', 0.15);
+                  setHue(Number(e.target.value));
+                  soundEngine.playTick();
                 }}
-                disabled={locked}
-                className="w-full h-6 rounded-lg bg-paper-warm border-2 border-ink"
+                disabled={isLocked}
+                className="w-full h-9 rounded-xl border-3 border-ink cursor-pointer appearance-none outline-none"
+                style={{
+                  background: 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)',
+                }}
               />
             </div>
-          )}
 
+            {/* Slider 2: Contrast / Saturation (0 - 100%) */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between font-mono text-xs font-bold text-ink">
+                <span>2. CONTRAST / SATURATION</span>
+                <span>{Math.round(saturation)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={saturation}
+                onChange={(e) => {
+                  setSaturation(Number(e.target.value));
+                  soundEngine.playTick();
+                }}
+                disabled={isLocked}
+                className="w-full h-9 rounded-xl border-3 border-ink cursor-pointer appearance-none outline-none"
+                style={{
+                  background: `linear-gradient(to right, hsl(${hue}, 0%, 50%), hsl(${hue}, 100%, 50%))`,
+                }}
+              />
+            </div>
+
+            {/* Slider 3: Brightness / Value (0 - 100%) */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between font-mono text-xs font-bold text-ink">
+                <span>3. BRIGHTNESS (LIGHTNESS)</span>
+                <span>{Math.round(value)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={value}
+                onChange={(e) => {
+                  setValue(Number(e.target.value));
+                  soundEngine.playTick();
+                }}
+                disabled={isLocked}
+                className="w-full h-9 rounded-xl border-3 border-ink cursor-pointer appearance-none outline-none"
+                style={{
+                  background: `linear-gradient(to right, #000000, hsl(${hue}, ${saturation}%, 50%), #ffffff)`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Tactile Lock In Button */}
           <button
             onClick={submitDial}
-            disabled={locked}
-            className="retro-btn w-full bg-arcade-terracotta text-white rounded-xl text-lg uppercase"
+            disabled={isLocked}
+            className={`retro-btn w-full py-4 rounded-xl text-lg uppercase flex items-center justify-center gap-2 ${
+              isLocked
+                ? 'bg-paper-dark text-ink-muted cursor-not-allowed opacity-80'
+                : 'bg-arcade-terracotta text-white hover:bg-arcade-terracotta/90'
+            }`}
           >
-            {locked ? 'Dial Locked In ✓' : 'Lock In Guess'}
+            {isLocked ? (
+              <>
+                <Check size={20} />
+                <span>Color Locked In ✓</span>
+              </>
+            ) : (
+              <>
+                <Target size={20} />
+                <span>Lock In Color Estimate</span>
+              </>
+            )}
           </button>
         </div>
       )}
 
-      {/* Round Reveal Leaderboard */}
-      {(phase === 'REVEAL' || phase === 'GAME_OVER') && gameState.round_results && (
+      {/* Reveal Phase Results */}
+      {(phase === 'REVEAL' || phase === 'GAME_OVER') && gameState.results && (
         <div className="retro-box-lg rounded-2xl p-6 bg-white space-y-4">
-          <h3 className="font-display font-black text-xl text-ink uppercase border-b-2 border-ink/10 pb-2">
-            Round Precision Scores
-          </h3>
-          <div className="space-y-2.5">
-            {Object.entries(gameState.round_results).map(([pid, res]: [string, any]) => {
-              const player = gameState.players?.find((p: any) => p.id === pid);
+          <div className="flex items-center gap-2 font-mono text-xs font-bold text-arcade-terracotta uppercase">
+            <Sparkles size={16} />
+            <span>Round Standings & Accuracy</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Object.entries(gameState.results).map(([pid, res]: [string, any]) => {
+              const score = Math.round(res.score || 0);
+              const dial = res.dial || {};
+              const dialS = (dial.s || 85) / 100;
+              const dialV = (dial.v || 85) / 100;
+              const dialL = dialV * (1 - dialS / 2);
+              const dialHslS = (dialL === 0 || dialL === 1) ? 0 : (dialV - dialL) / Math.min(dialL, 1 - dialL);
+              const playerColor = `hsl(${Math.round(dial.h || 0)}, ${Math.round(dialHslS * 100)}%, ${Math.round(dialL * 100)}%)`;
+
               return (
                 <div
                   key={pid}
-                  className="p-3.5 rounded-xl border-2 border-ink bg-paper-light flex items-center justify-between shadow-retro-sm"
+                  className="p-4 rounded-xl border-2 border-ink bg-paper-light flex items-center justify-between shadow-retro-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{player?.avatar || '🎮'}</span>
+                    <div
+                      className="w-10 h-10 rounded-xl border-2 border-ink shadow-sm"
+                      style={{ backgroundColor: playerColor }}
+                      title="Player's submitted color"
+                    />
                     <div>
-                      <div className="font-bold text-sm text-ink">{player?.nickname || pid}</div>
-                      <div className="font-mono text-xs text-ink-muted">
-                        Accuracy: <span className="font-bold text-arcade-cobalt">{res.score_pct}%</span>
-                      </div>
+                      <span className="font-bold text-sm text-ink block">{res.nickname}</span>
+                      <span className="font-mono text-xs text-ink-muted">
+                        Accuracy: {score}%
+                      </span>
                     </div>
                   </div>
-                  <div className="font-mono font-black text-lg text-emerald-700">
-                    +{res.points_awarded || 0} pts
+                  <div className="font-mono font-black text-lg text-arcade-cobalt">
+                    +{res.points_earned || 0} pts
                   </div>
                 </div>
               );

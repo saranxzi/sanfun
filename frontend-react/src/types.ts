@@ -36,6 +36,11 @@ export interface LobbyState {
   player_count: number;
   host_connected: boolean;
   network_info: NetworkInfo;
+  settings?: {
+    max_rounds?: number;
+    time_limit?: number;
+    [key: string]: any;
+  };
 }
 
 export interface HostGameState {

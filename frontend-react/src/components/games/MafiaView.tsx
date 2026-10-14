@@ -60,6 +60,30 @@ export function MafiaView({ isHost, gameState, onSendAction }: MafiaViewProps) {
         </h2>
       </div>
 
+      {/* Host Control: Call Vote Early */}
+      {isHost && (phase === 'DAY_DISCUSS' || phase === 'DAY_DISCUSSION' || phase === 'ROLE_REVEAL') && (
+        <div className="retro-box-lg rounded-2xl p-4 bg-arcade-cream border-3 border-ink flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>
+            <span className="font-display font-black text-base text-ink uppercase block">
+              Host Controls: Town Discussion
+            </span>
+            <span className="font-mono text-xs text-ink-muted">
+              Finished town debates? Start voting on execution now.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              soundEngine.playDing();
+              onSendAction('START_VOTING');
+            }}
+            className="retro-btn bg-arcade-terracotta text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase shadow-retro hover:bg-red-600 flex items-center gap-1.5 shrink-0"
+          >
+            <span>📢 End Debate & Start Vote Now</span>
+          </button>
+        </div>
+      )}
+
       {/* 3D Secret Role Card (Mobile & Player Screen) */}
       {!isHost && (
         <RoleCard3D

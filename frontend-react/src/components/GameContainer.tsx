@@ -1,15 +1,16 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { soundEngine } from '../audio/sound';
+import { useSmoothTimer } from '../hooks/useSmoothTimer';
 import { MafiaView } from './games/MafiaView';
 import { ImposterView } from './games/ImposterView';
 import { DialedView } from './games/DialedView';
 import { FermiView } from './games/FermiView';
-import { AuctionView } from './games/AuctionView';
+import { GuessPriceView } from './games/GuessPriceView';
 import { CircleView } from './games/CircleView';
-import { TrolleyView } from './games/TrolleyView';
+import { WouldYouRatherView } from './games/WouldYouRatherView';
 import { TrendsView } from './games/TrendsView';
-import { ArrowLeft, Clock, Trophy } from 'lucide-react';
+import { ArrowLeft, Clock, FastForward } from 'lucide-react';
 
 interface GameContainerProps {
   isHost: boolean;
@@ -17,6 +18,7 @@ interface GameContainerProps {
   phaseTimer: number;
   onBackToLobby: () => void;
   onSendAction: (action: string, data?: any) => void;
+  onSkipPhase?: () => void;
 }
 
 export function GameContainer({
@@ -25,9 +27,11 @@ export function GameContainer({
   phaseTimer,
   onBackToLobby,
   onSendAction,
+  onSkipPhase,
 }: GameContainerProps) {
   const gameId = gameState?.game_id || 'mafia';
   const isGameOver = gameState?.phase === 'GAME_OVER' || gameState?.is_over;
+  const { formatted, isUrgent, progressPct } = useSmoothTimer(phaseTimer);
 
   useEffect(() => {
     if (isGameOver) {
@@ -51,12 +55,14 @@ export function GameContainer({
         return <DialedView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
       case 'fermi':
         return <FermiView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
+      case 'guess_price':
       case 'auction':
-        return <AuctionView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
+        return <GuessPriceView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
       case 'circle':
         return <CircleView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
+      case 'rather':
       case 'trolley':
-        return <TrolleyView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
+        return <WouldYouRatherView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
       case 'trends':
         return <TrendsView isHost={isHost} gameState={gameState} onSendAction={onSendAction} />;
       default:
@@ -85,15 +91,29 @@ export function GameContainer({
           </div>
         </div>
 
-        {/* Phase Countdown Timer */}
-        {phaseTimer > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1 rounded-xl border-2 border-ink bg-arcade-cream font-mono font-black text-base md:text-lg shadow-retro-sm">
-            <Clock size={18} className={phaseTimer <= 5 ? 'text-arcade-terracotta animate-ping' : 'text-arcade-cobalt'} />
-            <span className={phaseTimer <= 5 ? 'text-arcade-terracotta' : 'text-ink'}>
-              {phaseTimer.toFixed(1)}s
-            </span>
-          </div>
-        )}
+        {/* Phase Countdown Timer & Host Skip Control */}
+        <div className="flex items-center gap-2">
+          {isHost && phaseTimer > 0 && onSkipPhase && (
+            <button
+              type="button"
+              onClick={onSkipPhase}
+              className="retro-btn bg-arcade-mustard text-ink px-3 py-1.5 rounded-xl text-xs uppercase flex items-center gap-1 font-black shadow-retro-sm hover:bg-arcade-mustard/90"
+              title="Skip countdown and advance to the next round immediately"
+            >
+              <FastForward size={14} />
+              <span>Skip Timer ⏭️</span>
+            </button>
+          )}
+
+          {phaseTimer > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 border-ink bg-arcade-cream font-mono font-black text-sm md:text-base shadow-retro-sm">
+              <Clock size={16} className={isUrgent ? 'text-arcade-terracotta animate-ping' : 'text-arcade-cobalt'} />
+              <span className={isUrgent ? 'text-arcade-terracotta' : 'text-ink'}>
+                {formatted}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Render Active Game View */}

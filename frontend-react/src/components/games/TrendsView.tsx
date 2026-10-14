@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { soundEngine } from '../../audio/sound';
 import { TrendingUp, TrendingDown, Flame, CheckCircle, XCircle } from 'lucide-react';
@@ -16,6 +16,10 @@ export function TrendsView({ isHost, gameState, onSendAction }: TrendsViewProps)
   const itemA = gameState?.item_a;
   const itemB = gameState?.item_b;
   const isReveal = phase === 'REVEAL' || phase === 'GAME_OVER';
+
+  useEffect(() => {
+    setSelectedGuess(null);
+  }, [gameState?.round_number, phase]);
 
   const handleGuess = (choice: 'HIGHER' | 'LOWER') => {
     setSelectedGuess(choice);

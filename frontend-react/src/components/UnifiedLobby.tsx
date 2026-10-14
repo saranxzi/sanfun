@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import type { LobbyState, GameMetadata } from '../types';
 import { soundEngine } from '../audio/sound';
-import { Play, Copy, Check, Users, Crown, UserX, Wifi, Globe, Sparkles, Bell } from 'lucide-react';
+import { Play, Copy, Check, Users, Crown, UserX, Wifi, Globe, Sparkles, Bell, RotateCcw, Sliders } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface UnifiedLobbyProps {
@@ -13,6 +13,8 @@ interface UnifiedLobbyProps {
   onStartGame: () => void;
   onKickPlayer: (targetPid: string) => void;
   onPromoteHost: (targetPid: string) => void;
+  onClearScores?: (targetPid?: string) => void;
+  onUpdateSettings?: (settings: { max_rounds?: number; time_limit?: number }) => void;
 }
 
 export function UnifiedLobby({
@@ -23,6 +25,8 @@ export function UnifiedLobby({
   onStartGame,
   onKickPlayer,
   onPromoteHost,
+  onClearScores,
+  onUpdateSettings,
 }: UnifiedLobbyProps) {
   const [qrSvg, setQrSvg] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -199,6 +203,85 @@ export function UnifiedLobby({
               );
             })}
           </div>
+
+          {/* Match Configuration Settings Panel */}
+          <div className="retro-box-lg rounded-2xl p-4 bg-white space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-black text-base text-ink uppercase flex items-center gap-2">
+                <Sliders size={18} className="text-arcade-cobalt" />
+                <span>Match Rules & Pacing</span>
+              </h3>
+              {!isHost && (
+                <span className="font-mono text-xs text-ink-muted">Host configured</span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Rounds */}
+              <div className="p-2.5 rounded-xl bg-paper-light border-2 border-ink">
+                <label className="block font-mono text-[11px] font-bold text-ink-muted uppercase mb-1.5">
+                  Total Rounds
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {[3, 5, 7, 10].map((rounds) => {
+                    const currentRounds = lobbyState.settings?.max_rounds || 5;
+                    const isActive = currentRounds === rounds;
+                    return (
+                      <button
+                        key={rounds}
+                        type="button"
+                        disabled={!isHost}
+                        onClick={() => onUpdateSettings?.({ max_rounds: rounds })}
+                        className={`flex-1 py-1.5 rounded-lg border-2 border-ink font-mono font-bold text-xs transition-all ${
+                          isActive
+                            ? 'bg-arcade-terracotta text-white shadow-retro-sm'
+                            : isHost
+                            ? 'bg-white hover:bg-paper-warm text-ink'
+                            : 'bg-white text-ink-muted opacity-80 cursor-default'
+                        }`}
+                      >
+                        {rounds}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Pacing / Time Limit */}
+              <div className="p-2.5 rounded-xl bg-paper-light border-2 border-ink">
+                <label className="block font-mono text-[11px] font-bold text-ink-muted uppercase mb-1.5">
+                  Round Pacing
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { label: '15s Blitz', val: 15 },
+                    { label: '30s Normal', val: 30 },
+                    { label: '60s Chill', val: 60 },
+                  ].map((pacing) => {
+                    const currentTime = lobbyState.settings?.time_limit || 30;
+                    const isActive = currentTime === pacing.val;
+                    return (
+                      <button
+                        key={pacing.val}
+                        type="button"
+                        disabled={!isHost}
+                        onClick={() => onUpdateSettings?.({ time_limit: pacing.val })}
+                        className={`flex-1 py-1.5 rounded-lg border-2 border-ink font-mono font-bold text-[11px] transition-all ${
+                          isActive
+                            ? 'bg-arcade-cobalt text-white shadow-retro-sm'
+                            : isHost
+                            ? 'bg-white hover:bg-paper-warm text-ink'
+                            : 'bg-white text-ink-muted opacity-80 cursor-default'
+                        }`}
+                      >
+                        {pacing.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Live Player Roster */}
@@ -211,9 +294,22 @@ export function UnifiedLobby({
                 {lobbyState.player_count}
               </span>
             </h2>
-            <span className="font-mono text-xs text-ink-muted">
-              {canStart ? 'Ready to play' : `Need ${playersNeeded} more`}
-            </span>
+            <div className="flex items-center gap-2">
+              {isHost && lobbyState.players.some((p) => p.score > 0) && (
+                <button
+                  type="button"
+                  onClick={() => onClearScores?.()}
+                  className="px-2 py-0.5 text-[11px] font-mono font-bold text-red-600 hover:bg-red-50 border border-red-300 rounded-lg flex items-center gap-1 shadow-retro-sm"
+                  title="Reset all player scores to 0"
+                >
+                  <RotateCcw size={11} />
+                  <span>Reset All</span>
+                </button>
+              )}
+              <span className="font-mono text-xs text-ink-muted">
+                {canStart ? 'Ready to play' : `Need ${playersNeeded} more`}
+              </span>
+            </div>
           </div>
 
           <div className="retro-box-lg rounded-2xl p-4 bg-white min-h-[320px] flex flex-col justify-between">
@@ -258,25 +354,39 @@ export function UnifiedLobby({
                     </div>
 
                     {/* Host Controls for Player Management */}
-                    {isHost && !p.is_host && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => onPromoteHost(p.id)}
-                          className="px-2 py-1 text-[11px] font-mono font-bold bg-white hover:bg-arcade-mustard border-2 border-ink rounded-lg shadow-retro-sm"
-                          title="Transfer Room Host Role"
-                        >
-                          Make Host
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onKickPlayer(p.id)}
-                          className="w-7 h-7 flex items-center justify-center text-red-600 hover:bg-red-100 border-2 border-ink rounded-lg shadow-retro-sm"
-                          title="Kick Player from Room"
-                          aria-label="Kick Player"
-                        >
-                          <UserX size={14} />
-                        </button>
+                    {isHost && (
+                      <div className="flex items-center gap-1">
+                        {p.score > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => onClearScores?.(p.id)}
+                            className="p-1.5 text-ink-muted hover:text-red-600 hover:bg-red-50 border border-ink/30 rounded-lg shadow-retro-sm"
+                            title="Reset this player's score to 0"
+                          >
+                            <RotateCcw size={12} />
+                          </button>
+                        )}
+                        {!p.is_host && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onPromoteHost(p.id)}
+                              className="px-2 py-1 text-[11px] font-mono font-bold bg-white hover:bg-arcade-mustard border-2 border-ink rounded-lg shadow-retro-sm"
+                              title="Transfer Room Host Role"
+                            >
+                              Make Host
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onKickPlayer(p.id)}
+                              className="w-7 h-7 flex items-center justify-center text-red-600 hover:bg-red-100 border-2 border-ink rounded-lg shadow-retro-sm"
+                              title="Kick Player from Room"
+                              aria-label="Kick Player"
+                            >
+                              <UserX size={14} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

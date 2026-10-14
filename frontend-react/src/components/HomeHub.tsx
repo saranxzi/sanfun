@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TotemCanvas } from './three/TotemCanvas';
 import { soundEngine } from '../audio/sound';
 import { ArrowRight, PlusCircle, Sparkles, User, Palette } from 'lucide-react';
@@ -18,6 +18,12 @@ export function HomeHub({ onJoin, onCreate, initialCode = '' }: HomeHubProps) {
   const [avatar, setAvatar] = useState(() => localStorage.getItem('sanfun_avatar') || '🦊');
   const [color, setColor] = useState(() => localStorage.getItem('sanfun_color') || '#E25241');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialCode) {
+      setCode(initialCode.toUpperCase().slice(0, 4));
+    }
+  }, [initialCode]);
 
   const handleAvatarSelect = (av: string) => {
     setAvatar(av);

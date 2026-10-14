@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ShieldAlert, Sparkles } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
+import { soundEngine } from '../../audio/sound';
 
 interface RoleCard3DProps {
   cardTitle: string;
@@ -23,26 +24,27 @@ export function RoleCard3D({
 }: RoleCard3DProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
-  return (
-    <div className="w-full max-w-sm mx-auto my-4 select-none">
-      <div className="text-center mb-2 font-mono text-xs font-bold text-ink-muted uppercase tracking-wider flex items-center justify-center gap-1.5">
-        {isFlipped ? <EyeOff size={14} /> : <Eye size={14} />}
-        {isFlipped ? 'Tap to conceal secret' : 'Tap or hold to peek secret'}
-      </div>
+  const toggleReveal = () => {
+    const next = !isFlipped;
+    setIsFlipped(next);
+    if (next) {
+      soundEngine.playDing();
+    } else {
+      soundEngine.playTone(320, 0.05, 'triangle', 0.15);
+    }
+  };
 
+  return (
+    <div className="w-full max-w-sm mx-auto my-4 select-none space-y-3">
+      {/* 3D Perspective Card Container */}
       <div
-        className="w-full h-72 perspective-1000 cursor-pointer"
-        onClick={() => setIsFlipped(!isFlipped)}
-        onTouchStart={() => setIsFlipped(true)}
-        onTouchEnd={() => setIsFlipped(false)}
-        onMouseDown={() => setIsFlipped(true)}
-        onMouseUp={() => setIsFlipped(false)}
-        onMouseLeave={() => setIsFlipped(false)}
+        className="w-full h-80 perspective-1000 cursor-pointer"
+        onClick={toggleReveal}
       >
         <motion.div
-          className="w-full h-full relative transform-style-3d transition-transform duration-500 rounded-2xl"
+          className="w-full h-full relative transform-style-3d rounded-2xl"
           animate={{ rotateY: isFlipped ? 180 : 0 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+          transition={{ type: 'spring', stiffness: 220, damping: 22 }}
         >
           {/* FRONT: Concealed Identity (Physical Card Back) */}
           <div className="absolute inset-0 w-full h-full backface-hidden rounded-2xl border-4 border-ink bg-paper-dark p-6 flex flex-col justify-between shadow-retro-lg overflow-hidden">
@@ -64,8 +66,8 @@ export function RoleCard3D({
               <p className="font-mono text-xs text-ink-muted mt-1">CONFIDENTIAL DOSSIER</p>
             </div>
 
-            <div className="bg-ink text-paper-light text-center py-2 rounded-lg font-mono text-xs font-bold tracking-wider uppercase">
-              HOLD TO REVEAL
+            <div className="bg-ink text-paper-light text-center py-2.5 rounded-xl font-mono text-xs font-bold tracking-wider uppercase shadow-sm">
+              TAP BUTTON BELOW TO REVEAL
             </div>
           </div>
 
@@ -87,11 +89,11 @@ export function RoleCard3D({
             </div>
 
             <div className="my-auto text-center px-2">
-              <div className="w-20 h-20 mx-auto rounded-2xl border-3 border-ink bg-paper-light flex items-center justify-center text-4xl shadow-retro mb-3">
+              <div className="w-16 h-16 mx-auto rounded-2xl border-3 border-ink bg-paper-light flex items-center justify-center text-3xl shadow-retro mb-2">
                 {secretIcon}
               </div>
               <div
-                className="font-display font-black text-3xl tracking-tight uppercase"
+                className="font-display font-black text-2xl md:text-3xl tracking-tight uppercase"
                 style={{ color: accentColor }}
               >
                 {secretTitle}
@@ -102,18 +104,41 @@ export function RoleCard3D({
                 </div>
               )}
               {secretDetails && (
-                <div className="font-mono text-xs text-ink/80 bg-paper-warm border border-ink/20 p-2.5 rounded-lg mt-3 text-left">
+                <div className="font-mono text-xs text-ink/90 bg-paper-warm border-2 border-ink/20 p-2.5 rounded-xl mt-2 text-left leading-relaxed">
                   {secretDetails}
                 </div>
               )}
             </div>
 
             <div className="border-t-2 border-ink/10 pt-2 text-center font-mono text-[11px] text-ink-muted uppercase">
-              Keep screen tilted away from neighbors!
+              Tilt screen away from prying eyes!
             </div>
           </div>
         </motion.div>
       </div>
+
+      {/* Single Tap Show/Hide Button */}
+      <button
+        type="button"
+        onClick={toggleReveal}
+        className={`w-full py-3.5 px-6 rounded-xl border-3 border-ink font-mono font-black text-sm tracking-wider uppercase shadow-retro transition-transform active:translate-y-1 flex items-center justify-center gap-2 ${
+          isFlipped
+            ? 'bg-ink text-white hover:bg-ink/90'
+            : 'bg-arcade-mustard text-ink hover:bg-arcade-mustard/90'
+        }`}
+      >
+        {isFlipped ? (
+          <>
+            <EyeOff size={18} />
+            <span>Hide Secret Dossier</span>
+          </>
+        ) : (
+          <>
+            <Eye size={18} />
+            <span>Show Secret Role</span>
+          </>
+        )}
+      </button>
     </div>
   );
 }

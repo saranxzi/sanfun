@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { soundEngine } from '../../audio/sound';
 import { Compass, Sparkles, CheckCircle2 } from 'lucide-react';
@@ -16,6 +16,12 @@ export function FermiView({ isHost, gameState, onSendAction }: FermiViewProps) {
   const phase = gameState?.phase || 'INIT';
   const prompt = gameState?.prompt;
   const unit = gameState?.unit || 'items';
+
+  useEffect(() => {
+    setLocked(false);
+  }, [gameState?.round_number, phase]);
+
+  const isLocked = locked || Boolean(gameState?.has_locked);
 
   const rawEstimatedValue = Math.pow(10, logVal);
 
@@ -102,17 +108,21 @@ export function FermiView({ isHost, gameState, onSendAction }: FermiViewProps) {
                 setLogVal(Number(e.target.value));
                 soundEngine.playTick();
               }}
-              disabled={locked}
+              disabled={isLocked}
               className="w-full h-8 rounded-lg bg-paper-warm border-2 border-ink cursor-pointer"
             />
           </div>
 
           <button
             onClick={handleLockIn}
-            disabled={locked}
-            className="retro-btn w-full bg-arcade-cobalt text-white rounded-xl text-lg uppercase"
+            disabled={isLocked}
+            className={`retro-btn w-full rounded-xl text-lg uppercase ${
+              isLocked
+                ? 'bg-paper-dark text-ink-muted cursor-not-allowed opacity-80'
+                : 'bg-arcade-cobalt text-white hover:bg-arcade-cobalt/90'
+            }`}
           >
-            {locked ? 'Estimate Locked In ✓' : 'Lock In Estimate'}
+            {isLocked ? 'Estimate Locked In ✓' : 'Lock In Estimate'}
           </button>
         </div>
       )}

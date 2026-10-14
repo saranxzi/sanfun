@@ -42,6 +42,30 @@ export function ImposterView({ isHost, gameState, onSendAction }: ImposterViewPr
         </h2>
       </div>
 
+      {/* Host Control: End Clues & Call Vote Early */}
+      {isHost && (phase === 'CLUE_ROUNDS' || phase === 'WORD_REVEAL') && (
+        <div className="retro-box-lg rounded-2xl p-4 bg-arcade-cream border-3 border-ink flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>
+            <span className="font-display font-black text-base text-ink uppercase block">
+              Host Controls: Clue Rounds
+            </span>
+            <span className="font-mono text-xs text-ink-muted">
+              Finished giving clues? Advance immediately to suspect voting.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              soundEngine.playDing();
+              onSendAction('START_VOTING');
+            }}
+            className="retro-btn bg-arcade-terracotta text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase shadow-retro hover:bg-red-600 flex items-center gap-1.5 shrink-0"
+          >
+            <span>📢 End Clues & Call Vote Now</span>
+          </button>
+        </div>
+      )}
+
       {/* 3D Secret Role Card */}
       {!isHost && (
         <RoleCard3D
@@ -51,7 +75,11 @@ export function ImposterView({ isHost, gameState, onSendAction }: ImposterViewPr
           secretIcon={isImposter ? '🦎' : '🎯'}
           accentColor={isImposter ? '#E25241' : '#2A9D8F'}
           isSpecial={isImposter}
-          secretDetails={isImposter && gameState.imposter_hint ? `Chameleon Hint: ${gameState.imposter_hint}` : null}
+          secretDetails={
+            isImposter && (gameState.vague_hint || gameState.imposter_hint)
+              ? `BLENDING CONCEPT: "${gameState.vague_hint || gameState.imposter_hint}". Use this concept to blend in during clue rounds without getting caught!`
+              : null
+          }
         />
       )}
 

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { soundEngine } from '../../audio/sound';
-import { RotateCcw, Check, Sparkles, Award } from 'lucide-react';
+import { RotateCcw, Check, AlertTriangle, Award, Sparkles } from 'lucide-react';
 
 interface CircleViewProps {
   isHost: boolean;
@@ -13,22 +13,39 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
   const [points, setPoints] = useState<[number, number][]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [warningMsg, setWarningMsg] = useState<string | null>(null);
 
   const phase = gameState?.phase || 'INIT';
 
   useEffect(() => {
-    if (phase === 'DRAWING') {
-      setSubmitted(false);
-      setPoints([]);
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
+    setSubmitted(false);
+    setPoints([]);
+    setWarningMsg(null);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     }
-  }, [phase]);
+  }, [gameState?.round_number, phase]);
+
+  const getCircleDimensions = (pts: [number, number][]) => {
+    if (pts.length < 5) return { width: 0, height: 0, diameter: 0, isTooSmall: false };
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [x, y] of pts) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const diameter = Math.max(width, height);
+    return { width, height, diameter, isTooSmall: diameter < 80 };
+  };
+
+  const dims = getCircleDimensions(points);
 
   const startDraw = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (submitted) return;
@@ -42,6 +59,7 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
 
     setIsDrawing(true);
     setPoints([[x, y]]);
+    setWarningMsg(null);
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -77,11 +95,17 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
   const endDraw = () => {
     if (!isDrawing || submitted) return;
     setIsDrawing(false);
+    const check = getCircleDimensions(points);
+    if (points.length >= 15 && check.isTooSmall) {
+      setWarningMsg('⚠️ Circle is too small to earn points! Clear and draw a larger circle.');
+      soundEngine.playTone(220, 0.1, 'sawtooth', 0.2);
+    }
   };
 
   const clearCanvas = () => {
     if (submitted) return;
     setPoints([]);
+    setWarningMsg(null);
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -89,11 +113,21 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     }
+    soundEngine.playTone(400, 0.05, 'sine', 0.1);
   };
 
   const submitCircle = () => {
-    if (points.length < 30) return;
+    if (points.length < 30) {
+      setWarningMsg('Please draw a full closed circular stroke (minimum 30 points).');
+      return;
+    }
+    if (dims.isTooSmall) {
+      setWarningMsg('Circle is too small! Tap "Clear & Try Again" and draw a larger circle to qualify for points.');
+      soundEngine.playTone(200, 0.15, 'sawtooth', 0.25);
+      return;
+    }
     setSubmitted(true);
+    setWarningMsg(null);
     soundEngine.playDing();
     onSendAction('SUBMIT_CIRCLE', { points });
   };
@@ -116,8 +150,16 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
       {!isHost && phase === 'DRAWING' && (
         <div className="retro-box-lg rounded-2xl p-6 bg-white space-y-4 text-center">
           <div className="font-mono text-xs text-ink-muted">
-            Draw one continuous closed circle on the pad below. Pratt fitting evaluates your precision!
+            Draw one continuous closed circle on the pad. Must be at least 80px wide to qualify for points!
           </div>
+
+          {/* Size Warning Banner */}
+          {(warningMsg || (points.length >= 20 && dims.isTooSmall)) && (
+            <div className="p-3 bg-amber-50 border-2 border-amber-600 rounded-xl font-mono text-xs font-bold text-amber-900 flex items-center justify-center gap-2 shadow-sm">
+              <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+              <span>{warningMsg || '⚠️ Circle is too small! Draw bigger or you will score 0 pts.'}</span>
+            </div>
+          )}
 
           <div className="relative mx-auto w-full max-w-sm aspect-square bg-paper-light border-3 border-ink rounded-2xl shadow-retro overflow-hidden touch-none">
             <canvas
@@ -142,21 +184,27 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
               type="button"
               onClick={clearCanvas}
               disabled={submitted || points.length === 0}
-              className="retro-btn bg-paper-dark text-ink text-sm px-4 rounded-xl flex items-center gap-1.5"
+              className="retro-btn bg-paper-dark text-ink text-sm px-4 rounded-xl flex items-center gap-1.5 font-bold"
             >
               <RotateCcw size={16} />
-              <span>Clear</span>
+              <span>Clear & Try Again</span>
             </button>
             <button
               type="button"
               onClick={submitCircle}
-              disabled={submitted || points.length < 30}
-              className="retro-btn flex-1 bg-arcade-cobalt text-white rounded-xl text-base uppercase flex items-center justify-center gap-2"
+              disabled={submitted || points.length < 30 || dims.isTooSmall}
+              className={`retro-btn flex-1 rounded-xl text-base uppercase flex items-center justify-center gap-2 font-black ${
+                dims.isTooSmall && points.length >= 20
+                  ? 'bg-amber-100 text-amber-800 border-amber-400 cursor-not-allowed'
+                  : 'bg-arcade-cobalt text-white hover:bg-arcade-cobalt/90'
+              }`}
             >
               <Check size={18} />
               <span>
                 {submitted
                   ? 'Submitted ✓'
+                  : dims.isTooSmall && points.length >= 20
+                  ? 'Too Small (Draw Bigger)'
                   : points.length < 30 && points.length > 0
                   ? `Need More (${points.length}/30)`
                   : 'Submit Circle'}
@@ -176,6 +224,7 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
             {Object.entries(gameState.evals).map(([pid, ev]: [string, any]) => {
               const player = gameState.players?.find((p: any) => p.id === pid);
               const metrics = ev.metrics || {};
+              const reason = ev.reason || '';
               return (
                 <div
                   key={pid}
@@ -186,7 +235,11 @@ export function CircleView({ isHost, gameState, onSendAction }: CircleViewProps)
                     <div>
                       <div className="font-bold text-base text-ink">{player?.nickname || pid}</div>
                       <div className="font-mono text-xs text-ink-muted">
-                        Coverage: {metrics.angular_coverage_pct || 0}% • Mean Radius: {metrics.mean_radius || 0}px
+                        {reason ? (
+                          <span className="text-arcade-terracotta font-semibold">{reason}</span>
+                        ) : (
+                          <>Coverage: {metrics.angular_coverage_pct || 0}% • Mean Radius: {metrics.mean_radius || 0}px</>
+                        )}
                       </div>
                     </div>
                   </div>
